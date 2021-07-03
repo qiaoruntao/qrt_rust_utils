@@ -9,7 +9,7 @@ impl ConfigManager {
     pub fn read_config_with_directory<T: DeserializeOwned>(
         config_directory: &str,
     ) -> Result<T, ConfigError> {
-        let default_file_path = Path::new(config_directory).join("default.toml");
+        let default_file_path = Path::new(config_directory).join("default-example.toml");
         let custom_file_path = Path::new(config_directory).join("custom.toml");
         let mut s = Config::new();
         // load default
