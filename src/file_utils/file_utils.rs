@@ -5,7 +5,7 @@ pub struct FileUtils {}
 
 impl FileUtils {
     pub fn write_file(file_path: &str, content: &str) {
-        let file = File::open(file_path).unwrap();
+        let file = File::create(file_path).unwrap();
         let mut writer = BufWriter::new(file);
         let _result = writer.write(content.as_bytes());
     }
