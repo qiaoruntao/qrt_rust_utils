@@ -6,7 +6,7 @@ use tokio::process::Command;
 pub struct YoutubeDlUtils {}
 
 impl YoutubeDlUtils {
-    async fn download(filename: &str, download_directory: &str, url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn download(filename: &str, download_directory: &str, url: &str) -> Result<(), Box<dyn std::error::Error>> {
         let mut command = Command::new("youtube-dl");
         let command = command
             .stdin(Stdio::null())
