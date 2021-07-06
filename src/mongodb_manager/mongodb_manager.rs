@@ -39,8 +39,13 @@ impl MongoDbManager {
         t.password = Some(config.password);
         t.source = Some(config.source);
         options.credential = Some(t);
-        let tls_options = TlsOptions::default();
-        options.tls = Some(Tls::Enabled(tls_options));
+        if config.use_tls {
+            let tls_options = TlsOptions::default();
+            options.tls = Some(Tls::Enabled(tls_options));
+        } else {
+            options.tls = None;
+        }
+
         options
     }
 

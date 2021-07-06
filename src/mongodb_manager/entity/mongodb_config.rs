@@ -7,4 +7,5 @@ pub struct MongoDbConfig {
     pub password: String,
     pub port: u16,
     pub source: String,
+    pub use_tls: bool,
 }
