@@ -19,3 +19,7 @@ tracing-subscriber = { version = "0.2.12" }
 tracing-bunyan-formatter = "0.2.4"
 tracing-log = "0.1.2"
 tracing-test = "0.1.0"
+
+[workspace]
+members = ["qrt_rust_macros"]
+exclude = []
