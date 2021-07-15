@@ -19,7 +19,11 @@ tracing-subscriber = { version = "0.2.12" }
 tracing-bunyan-formatter = "0.2.4"
 tracing-log = "0.1.2"
 tracing-test = "0.1.0"
-
+tracing-honeycomb = "0.4.1"
+libhoney-rust = "0.1.6"
 [workspace]
 members = ["qrt_rust_macros"]
 exclude = []
+[[bin]]
+path = "./src/test_honeycomb.rs"
+name = "test_honeycomb"
