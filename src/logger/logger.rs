@@ -1,9 +1,28 @@
 use std::io;
 
+use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_subscriber::fmt::MakeWriter;
+use tracing_subscriber::layer::{Layered, SubscriberExt};
+use tracing_subscriber::Registry;
 
-pub struct Logger {
+pub struct Logger {}
 
+impl Logger {
+    pub fn generate_subscriber() -> Layered<BunyanFormattingLayer<MyMakeWriter>, Layered<JsonStorageLayer, Registry>> {
+        let formatting_layer = BunyanFormattingLayer::new(
+            "tracing_demo".into(),
+            MyMakeWriter {},
+        );
+        let subscriber = Registry::default()
+            .with(JsonStorageLayer)
+            .with(formatting_layer);
+        subscriber
+    }
+
+    pub fn init_logger() {
+        let subscriber = Logger::generate_subscriber();
+        tracing::subscriber::set_global_default(subscriber).expect("failed to set logger");
+    }
 }
 
 pub struct MyWriter {}
@@ -32,11 +51,8 @@ impl MakeWriter for MyMakeWriter {
 #[cfg(test)]
 mod test_logger {
     use tracing::instrument;
-    use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-    use tracing_subscriber::{EnvFilter, Registry};
-    use tracing_subscriber::layer::SubscriberExt;
 
-    use crate::logger::logger::MyMakeWriter;
+    use super::Logger;
 
     #[instrument]
     pub fn a_unit_of_work(first_parameter: u64) {
@@ -54,21 +70,8 @@ mod test_logger {
 
     #[test]
     fn span_test() {
-        let formatting_layer = BunyanFormattingLayer::new(
-            "tracing_demo".into(),
-            MyMakeWriter {},
-        );
-        let subscriber = Registry::default()
-            .with(JsonStorageLayer)
-            .with(formatting_layer);
-        tracing::subscriber::set_global_default(subscriber).unwrap();
-
+        Logger::init_logger();
         tracing::info!("Orphan event without a parent span");
         a_unit_of_work(2);
-    }
-
-    #[test]
-    fn basic_test() {
-        let env_filter = EnvFilter::new("trace");
     }
 }
