@@ -20,4 +20,4 @@ Cargo.lock
 *.iml
 out
 gen
-/config/mongo/default.toml
+/config/*/default.toml

@@ -5,15 +5,21 @@ use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::layer::{Layered, SubscriberExt};
 use tracing_subscriber::Registry;
 
+use crate::config_manage::config_manager::ConfigManager;
+use crate::logger::fluentd_layer::{FluentdLayer, FluentdLayerConfig};
+
 pub struct Logger {}
 
 impl Logger {
-    pub fn generate_subscriber() -> Layered<BunyanFormattingLayer<MyMakeWriter>, Layered<JsonStorageLayer, Registry>> {
+    pub fn generate_subscriber() -> Layered<BunyanFormattingLayer<MyMakeWriter>, Layered<JsonStorageLayer, Layered<FluentdLayer, Registry>>> {
         let formatting_layer = BunyanFormattingLayer::new(
             "tracing_demo".into(),
             MyMakeWriter {},
         );
+        let config: FluentdLayerConfig = ConfigManager::read_config_with_directory("./config/logger").unwrap();
+        let fluentd_layer = FluentdLayer::generate(&config);
         let subscriber = Registry::default()
+            .with(fluentd_layer)
             .with(JsonStorageLayer)
             .with(formatting_layer);
         subscriber
