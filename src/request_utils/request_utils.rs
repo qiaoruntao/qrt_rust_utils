@@ -6,7 +6,7 @@ use reqwest::header::HeaderMap;
 pub struct RequestUtils {}
 
 impl RequestUtils {
-    pub fn get_client(timeout: Option<Duration>, proxy_address: Option<String>) -> Client {
+    pub fn build_client(timeout: Option<Duration>, proxy_address: Option<String>) -> Client {
         let mut header_map = HeaderMap::new();
         header_map.append("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36".parse().unwrap());
         header_map.append("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9".parse().unwrap());
