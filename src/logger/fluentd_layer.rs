@@ -109,7 +109,7 @@ impl Visit for TestVisitor {
 impl<S: Subscriber> Layer<S> for FluentdLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
         let metadata = event.metadata();
-
+        // dbg!(event);
         // try to get the message
         let mut visitor = TestVisitor { message: None };
         event.record(&mut visitor);
@@ -128,7 +128,6 @@ impl<S: Subscriber> Layer<S> for FluentdLayer {
         };
         let fluentd_layer = FluentdLayer::generate(&self.config);
         fluentd_layer.send_log(&fluentd_log);
-        // dbg!(event);
     }
 }
 
