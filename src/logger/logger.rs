@@ -3,7 +3,7 @@ use std::io::Stdout;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::format::{DefaultFields, Format, Full};
 use tracing_subscriber::fmt::Layer;
-use tracing_subscriber::fmt::time::{ChronoLocal, ChronoUtc, SystemTime};
+use tracing_subscriber::fmt::time::ChronoLocal;
 use tracing_subscriber::layer::{Layered, SubscriberExt};
 use tracing_subscriber::Registry;
 
