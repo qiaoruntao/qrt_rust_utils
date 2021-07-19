@@ -2,7 +2,8 @@ use std::io::Stdout;
 
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::format::{DefaultFields, Format, Full};
-use tracing_subscriber::fmt::time::SystemTime;
+use tracing_subscriber::fmt::Layer;
+use tracing_subscriber::fmt::time::{ChronoLocal, ChronoUtc, SystemTime};
 use tracing_subscriber::layer::{Layered, SubscriberExt};
 use tracing_subscriber::Registry;
 
@@ -12,17 +13,19 @@ use crate::logger::fluentd_layer::{FluentdLayer, FluentdLayerConfig};
 pub struct Logger {}
 
 impl Logger {
-    pub fn generate_subscriber() -> Layered<tracing_subscriber::fmt::Layer<Layered<FluentdLayer, Registry>, DefaultFields, Format<Full, SystemTime>, fn() -> Stdout>, Layered<FluentdLayer, Registry>> {
+    pub fn generate_subscriber() -> Layered<Layer<Layered<FluentdLayer, Registry>, DefaultFields, Format<Full, ChronoLocal>, fn() -> Stdout>, Layered<FluentdLayer, Registry>> {
         // let formatting_layer = BunyanFormattingLayer::new(
         //     "tracing_demo".into(),
         //     MyMakeWriter {},
         // );
         let config: FluentdLayerConfig = ConfigManager::read_config_with_directory("./config/logger").unwrap();
         let fluentd_layer = FluentdLayer::generate(&config);
+        let fmt_layer = fmt::Layer::default()
+            .with_timer(ChronoLocal::rfc3339());
         let subscriber = Registry::default()
             // .with(JsonStorageLayer)
             .with(fluentd_layer)
-            .with(fmt::Layer::default());
+            .with(fmt_layer);
         subscriber
     }
 
