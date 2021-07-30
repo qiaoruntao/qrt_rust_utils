@@ -22,6 +22,7 @@ lazy_static = "1.4.0"
 serde-enum-str = "0.1.0"
 serde_with = { version = "1.9.4", features = ["chrono"] }
 tracing-serde = "0.1.2"
+qrt_rust_macros = { path = 'qrt_rust_macros' }
 [workspace]
 members = ["qrt_rust_macros"]
 exclude = []

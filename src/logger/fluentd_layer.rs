@@ -1,3 +1,4 @@
+#[allow(ambiguous_associated_items)]
 use std::fmt::Debug;
 
 use chrono::{DateTime, Local};
@@ -31,7 +32,8 @@ pub enum FluentdLogLevel {
     #[serde(rename = "warn")]
     Warn,
     #[serde(rename = "error")]
-    Error,
+    // TODO: #[allow(ambiguous_associated_items)]
+    ERROR,
     #[serde(rename = "fatal")]
     Fatal,
 }
@@ -46,7 +48,7 @@ impl From<&Level> for FluentdLogLevel {
                 FluentdLogLevel::Debug
             }
             Level::ERROR => {
-                FluentdLogLevel::Error
+                FluentdLogLevel::ERROR
             }
             Level::INFO => {
                 FluentdLogLevel::Info
