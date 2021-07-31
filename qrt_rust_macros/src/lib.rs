@@ -34,9 +34,9 @@ pub fn derive_to_hashmap(input_struct: TokenStream) -> TokenStream {
 
     // start codegen for to_hashmap functionality that converts a struct into a hashmap
     let tokens = quote! {
-        impl #impl_generics Into<HashMap<String, String>> for #name #ty_generics #where_clause {
-            fn into(self) -> HashMap<String, String> {
-                let mut map = HashMap::new();
+        impl #impl_generics Into<std::collections::HashMap<String, String>> for #name #ty_generics #where_clause {
+            fn into(self) -> std::collections::HashMap<String, String> {
+                let mut map = std::collections::HashMap::new();
                 #(
                     map.insert(#keys.to_string(), self.#idents.to_string());
                 )*
