@@ -29,13 +29,16 @@ pub fn derive_to_hashmap(input_struct: TokenStream) -> TokenStream {
                             for sub_attr in lst.nested.iter() {
                                 match sub_attr {
                                     NestedMeta::Meta(syn::Meta::NameValue(name_value)) => {
-                                        let sub_attr_name = name_value.path.get_ident().unwrap().to_string();
+                                        let sub_attr_name =
+                                            name_value.path.get_ident().unwrap().to_string();
                                         if sub_attr_name != "rename" {
                                             break;
                                         }
                                         let alternative_name = match &name_value.lit {
                                             syn::Lit::Str(value) => value.value(),
-                                            _ => { break; }
+                                            _ => {
+                                                break;
+                                            }
                                         };
                                         rename_map.insert(field_name, alternative_name);
                                         // there should only be one rename, ignore other renames
@@ -54,7 +57,6 @@ pub fn derive_to_hashmap(input_struct: TokenStream) -> TokenStream {
             panic!("All fields must be named in struct");
         }
     }
-
 
     // parse out all the field names in the struct as `Ident`s
     let idents: Vec<&Ident> = fields
