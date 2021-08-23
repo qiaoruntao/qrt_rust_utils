@@ -137,13 +137,13 @@ pub struct FluentdLayerConfig {
 impl FluentdLayer {
     pub fn send_log(&self, fluentd_log: &FluentdLog) {
         // post method consumes instance
-        println!("start send_log");
+        // println!("start send_log");
         let config = &self.config;
         let retry_conf = RetryConf::new().max(1).multiplier(0.0);
         let fluentd_instance =
             Fluent::new_with_conf(config.server_url.clone(), config.tag.clone(), retry_conf);
         let _result = fluentd_instance.post(fluentd_log);
-        dbg!(&_result);
+        // dbg!(&_result);
         // assert!(result.is_ok())
     }
     pub fn generate(config: &FluentdLayerConfig) -> FluentdLayer {
