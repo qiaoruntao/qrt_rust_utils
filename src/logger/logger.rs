@@ -11,7 +11,7 @@ pub struct Logger {}
 
 #[derive(Debug, Builder)]
 pub struct LoggerConfig {
-    with_fluentd: bool,
+    pub with_fluentd: bool,
 }
 
 impl Default for LoggerConfig {
