@@ -23,6 +23,7 @@ serde-enum-str = "0.1.0"
 serde_with = { version = "1.9.4", features = ["chrono"] }
 tracing-serde = "0.1.2"
 qrt_rust_macros = { path = 'qrt_rust_macros', optional = true }
+derive_builder = "0.10.2"
 [dev-dependencies]
 qrt_rust_macros = { path = 'qrt_rust_macros' }
 [workspace]

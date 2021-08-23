@@ -1,5 +1,6 @@
 use std::io::Stdout;
 
+use derive_builder::Builder;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::format::{DefaultFields, Format, Full};
 use tracing_subscriber::fmt::Layer;
@@ -12,32 +13,42 @@ use crate::logger::fluentd_layer::{FluentdLayer, FluentdLayerConfig};
 
 pub struct Logger {}
 
+#[derive(Debug, Builder)]
+pub struct LoggerConfig {
+    with_fluentd: bool,
+}
+
+impl Default for LoggerConfig {
+    fn default() -> Self {
+        LoggerConfig {
+            // disable fluentd because it has severe problem
+            with_fluentd: false
+        }
+    }
+}
+
 impl Logger {
-    pub fn generate_subscriber() -> Layered<Layer<Layered<FluentdLayer, Registry>, DefaultFields, Format<Full, ChronoLocal>, fn() -> Stdout>, Layered<FluentdLayer, Registry>> {
-        // let formatting_layer = BunyanFormattingLayer::new(
-        //     "tracing_demo".into(),
-        //     MyMakeWriter {},
-        // );
-        let config: FluentdLayerConfig = ConfigManager::read_config_with_directory("./config/logger").unwrap();
-        let fluentd_layer = FluentdLayer::generate(&config);
+    pub fn init_logger(logger_config: &LoggerConfig) {
         let fmt_layer = fmt::Layer::default()
             .with_timer(ChronoLocal::rfc3339());
         let subscriber = Registry::default()
             // .with(JsonStorageLayer)
-            .with(fluentd_layer)
             .with(fmt_layer);
-        subscriber
-    }
-
-    pub fn init_logger() {
-        let subscriber = Logger::generate_subscriber();
-        tracing::subscriber::set_global_default(subscriber).expect("failed to set logger");
+        if logger_config.with_fluentd {
+            let config: FluentdLayerConfig = ConfigManager::read_config_with_directory("./config/logger").unwrap();
+            let fluentd_layer = FluentdLayer::generate(&config);
+            tracing::subscriber::set_global_default(subscriber.with(fluentd_layer)).expect("failed to set logger");
+        } else {
+            tracing::subscriber::set_global_default(subscriber).expect("failed to set logger");
+        };
     }
 }
 
 #[cfg(test)]
 mod test_logger {
     use tracing::instrument;
+
+    use crate::logger::logger::LoggerConfig;
 
     use super::Logger;
 
@@ -57,7 +68,7 @@ mod test_logger {
 
     #[test]
     fn span_test() {
-        Logger::init_logger();
+        Logger::init_logger(&LoggerConfig::default());
         tracing::info!("Orphan event without a parent span");
         a_unit_of_work(2);
     }

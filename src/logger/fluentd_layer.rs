@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use chrono::{DateTime, Local};
 use fruently::fluent::Fluent;
 use fruently::forwardable::JsonForwardable;
+use fruently::retry_conf::RetryConf;
 use serde::{Deserialize, Serialize};
 use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
 use tracing::{Event, Level, Subscriber};
@@ -143,13 +144,16 @@ pub struct FluentdLayerConfig {
 impl FluentdLayer {
     pub fn send_log(&self, fluentd_log: &FluentdLog) {
         // post method consumes instance
+        println!("start send_log");
         let config = &self.config;
-        let fluentd_instance = Fluent::new(
+        let retry_conf = RetryConf::new().max(1).multiplier(0.0);
+        let fluentd_instance = Fluent::new_with_conf(
             config.server_url.clone(),
             config.tag.clone(),
+            retry_conf,
         );
         let _result = fluentd_instance.post(fluentd_log);
-        // dbg!(&result);
+        dbg!(&_result);
         // assert!(result.is_ok())
     }
     pub fn generate(config: &FluentdLayerConfig) -> FluentdLayer {
