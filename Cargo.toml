@@ -7,19 +7,19 @@ edition = "2018"
 
 [dependencies]
 config = "0.11.0"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.130", features = ["derive"] }
 chrono = { version = "0.4.19", features = ["serde"] }
 #futures = "0.3.14"
-tokio = { version = "1", features = ["full"] }
-mongodb = { version = "2.0.0-beta.2", default-features = false, features = ["async-std-runtime"] }
-reqwest = { version = "0.11", features = ['socks'] }
-tracing = { version = "0.1", features = ["log"] }
+tokio = { version = "1.10.1", features = ["full"] }
+mongodb = { version = "2.0.0-beta.3", default-features = false, features = ["async-std-runtime"] }
+reqwest = { version = "0.11.4", features = ['socks'] }
+tracing = { version = "0.1.26", features = ["log"] }
 #tracing-futures = { version = "0.2.5", default-features = false }
-tracing-subscriber = { version = "0.2.12" }
+tracing-subscriber = "0.2.20"
 tracing-log = "0.1.2"
-fruently = { version = "~0.10.0", features = [] }
+fruently = { version = "0.10.0", features = [] }
 lazy_static = "1.4.0"
-serde-enum-str = "0.1.0"
+serde-enum-str = "0.2.4"
 serde_with = { version = "1.9.4", features = ["chrono"] }
 tracing-serde = "0.1.2"
 qrt_rust_macros = { path = 'qrt_rust_macros', optional = true }
