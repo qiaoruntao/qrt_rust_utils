@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 
-use mongodb::{Collection, Database};
 use mongodb::{Client, options::ClientOptions};
+use mongodb::{Collection, Database};
 use mongodb::options::{Credential, Tls, TlsOptions};
 use mongodb::options::ServerAddress::Tcp;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::mongodb_manager::entity::mongodb_config::MongoDbConfig;
 

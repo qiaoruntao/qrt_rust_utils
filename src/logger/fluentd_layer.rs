@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use chrono::{DateTime, Local};
 use fruently::fluent::Fluent;
 use fruently::forwardable::JsonForwardable;
+use fruently::retry_conf::RetryConf;
 use serde::{Deserialize, Serialize};
 use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
 use tracing::{Event, Level, Subscriber};
@@ -41,21 +42,11 @@ pub enum FluentdLogLevel {
 impl From<&Level> for FluentdLogLevel {
     fn from(value: &Level) -> Self {
         match *value {
-            Level::TRACE => {
-                FluentdLogLevel::Trace
-            }
-            Level::DEBUG => {
-                FluentdLogLevel::Debug
-            }
-            Level::ERROR => {
-                FluentdLogLevel::ERROR
-            }
-            Level::INFO => {
-                FluentdLogLevel::Info
-            }
-            Level::WARN => {
-                FluentdLogLevel::Warn
-            }
+            Level::TRACE => FluentdLogLevel::Trace,
+            Level::DEBUG => FluentdLogLevel::Debug,
+            Level::ERROR => FluentdLogLevel::ERROR,
+            Level::INFO => FluentdLogLevel::Info,
+            Level::WARN => FluentdLogLevel::Warn,
         }
     }
 }
@@ -126,7 +117,10 @@ impl<S: Subscriber> Layer<S> for FluentdLayer {
             log_level: metadata.level().into(),
             content: FluentdLogContent { raw_value: message },
             tags: vec![],
-            location: FluentdLogLocation { line_number: metadata.line(), filename: metadata.file().map(|name| name.to_string()) },
+            location: FluentdLogLocation {
+                line_number: metadata.line(),
+                filename: metadata.file().map(|name| name.to_string()),
+            },
         };
         let fluentd_layer = FluentdLayer::generate(&self.config);
         fluentd_layer.send_log(&fluentd_log);
@@ -143,18 +137,18 @@ pub struct FluentdLayerConfig {
 impl FluentdLayer {
     pub fn send_log(&self, fluentd_log: &FluentdLog) {
         // post method consumes instance
+        // println!("start send_log");
         let config = &self.config;
-        let fluentd_instance = Fluent::new(
-            config.server_url.clone(),
-            config.tag.clone(),
-        );
+        let retry_conf = RetryConf::new().max(1).multiplier(0.0);
+        let fluentd_instance =
+            Fluent::new_with_conf(config.server_url.clone(), config.tag.clone(), retry_conf);
         let _result = fluentd_instance.post(fluentd_log);
-        // dbg!(&result);
+        // dbg!(&_result);
         // assert!(result.is_ok())
     }
     pub fn generate(config: &FluentdLayerConfig) -> FluentdLayer {
         FluentdLayer {
-            config: config.clone()
+            config: config.clone(),
         }
     }
 }
@@ -164,7 +158,10 @@ mod test {
     use chrono::Local;
 
     use crate::config_manage::config_manager::ConfigManager;
-    use crate::logger::fluentd_layer::{FluentdLayer, FluentdLayerConfig, FluentdLog, FluentdLogContent, FluentdLogLevel, FluentdLogLocation};
+    use crate::logger::fluentd_layer::{
+        FluentdLayer, FluentdLayerConfig, FluentdLog, FluentdLogContent, FluentdLogLevel,
+        FluentdLogLocation,
+    };
 
     #[test]
     fn send_test() {
@@ -173,16 +170,22 @@ mod test {
             instance_name: "test".to_string(),
             logger_name: "test_logger".to_string(),
             log_level: FluentdLogLevel::Silly,
-            content: FluentdLogContent { raw_value: "test content".to_string() },
+            content: FluentdLogContent {
+                raw_value: "test content".to_string(),
+            },
             tags: vec!["aaa".to_string()],
-            location: FluentdLogLocation { line_number: None, filename: None },
+            location: FluentdLogLocation {
+                line_number: None,
+                filename: None,
+            },
         };
         let fluentd_layer = generate_layer();
         fluentd_layer.send_log(&fluentd_log);
     }
 
     fn generate_layer() -> FluentdLayer {
-        let config: FluentdLayerConfig = ConfigManager::read_config_with_directory("./config/logger").unwrap();
+        let config: FluentdLayerConfig =
+            ConfigManager::read_config_with_directory("./config/logger").unwrap();
         let fluentd_layer = FluentdLayer::generate(&config);
         fluentd_layer
     }

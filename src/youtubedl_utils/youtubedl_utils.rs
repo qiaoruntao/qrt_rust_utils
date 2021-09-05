@@ -2,11 +2,14 @@ use std::process::Stdio;
 
 use tokio::process::Command;
 
-
 pub struct YoutubeDlUtils {}
 
 impl YoutubeDlUtils {
-    pub async fn download(filename: &str, download_directory: &str, url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn download(
+        filename: &str,
+        download_directory: &str,
+        url: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut command = Command::new("youtube-dl");
         let command = command
             .stdin(Stdio::null())
@@ -42,11 +45,13 @@ impl YoutubeDlUtils {
 }
 
 #[cfg(test)]
-mod youtubedl_test{
+mod youtubedl_test {
     use crate::youtubedl_utils::youtubedl_utils::YoutubeDlUtils;
 
     #[tokio::test]
-    async fn basic(){
-        let _result = YoutubeDlUtils::download("aaa", "R:/", "https://www.youtube.com/watch?v=MOnsIGcZS-M").await;
+    async fn basic() {
+        let _result =
+            YoutubeDlUtils::download("aaa", "R:/", "https://www.youtube.com/watch?v=MOnsIGcZS-M")
+                .await;
     }
 }

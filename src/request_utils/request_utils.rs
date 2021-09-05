@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use reqwest::{Client, Proxy};
 use reqwest::header::HeaderMap;
+use reqwest::{Client, Proxy};
 
 pub struct RequestUtils {}
 
