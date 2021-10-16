@@ -15,3 +15,6 @@ pub mod mongodb_manager;
 pub mod request_utils;
 pub mod set_interval;
 pub mod youtubedl_utils;
+pub mod task;
+pub mod domain;
+pub mod downloader;
