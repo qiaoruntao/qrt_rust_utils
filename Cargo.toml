@@ -25,6 +25,7 @@ tracing-serde = "0.1.2"
 qrt_rust_macros = { path = 'qrt_rust_macros', optional = true }
 derive_builder = "0.10.2"
 async-recursion = "0.3.2"
+regex = "1.5.4"
 [dev-dependencies]
 qrt_rust_macros = { path = 'qrt_rust_macros' }
 [workspace]
