@@ -1,9 +1,14 @@
-use chrono::Local;
+use std::fmt::Debug;
+
+use chrono::{Date, Local};
 use futures::TryStreamExt;
 use mongodb::bson::Bson::Null;
 use mongodb::bson::doc;
+use mongodb::bson::Document;
 use mongodb::Collection;
 use mongodb::options::InsertOneOptions;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskMeta, TaskOptions, TaskState};
@@ -51,11 +56,21 @@ impl TaskScheduler {
     }
 
     // find tasks that we can process
-    pub async fn find_pending_task(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn find_pending_task(&self) -> Result<Box<Vec<Task<i32, i32>>>, Box<dyn std::error::Error>> {
         let mut options = mongodb::options::FindOptions::default();
         let collection = self.db_manager.get_collection::<Task<i32, i32>>("live_record");
 
-        let filter = doc! {
+        let filter = TaskScheduler::generate_pending_task_condition();
+        // dbg!(&filter);
+        let mut cursor = collection.find(filter, Some(options)).await?;
+        let result = cursor.try_collect::<Vec<_>>().await?;
+        dbg!(&result);
+        // println!("ok");
+        Ok(Box::from(result))
+    }
+
+    fn generate_pending_task_condition() -> Document {
+        doc! {
             "$and":[
                 {"task_state.complete_time":Null},
                 {
@@ -72,22 +87,48 @@ impl TaskScheduler {
                     ]
                 }
             ]
-        };
-        dbg!(&filter);
-        let mut cursor = collection.find(filter, Some(options)).await?;
-        while let Some(doc) = cursor.try_next().await? {
-            println!("{:#?}", doc);
         }
-        println!("ok");
+    }
+
+    // lock the task we want to handle
+    pub async fn occupy_pending_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), Box<dyn std::error::Error>>
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
+        let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
+
+        let basic_filter = TaskScheduler::generate_pending_task_condition();
+        // we need to make sure the task is still pending
+        let filter = doc! {
+            "$and":[
+                basic_filter,
+                {"key":&task.key}
+            ]
+        };
+        let new_state = TaskState::init(&Local::now(), 1, &task.option);
+        let update = doc! {
+            "$set":{
+                "task_state":mongodb::bson::to_document( &new_state).unwrap()
+            }
+        };
+
+        dbg!(&filter);
+        dbg!(&update);
+        let mut options = mongodb::options::UpdateOptions::default();
+        options.upsert = Some(false);
+
+        let result = collection.update_one(filter, update, Some(options)).await?;
+        dbg!(&result);
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod test_task_scheduler {
+    use std::error::Error;
+
     use crate::config_manage::config_manager::ConfigManager;
     use crate::db_task::task_scheduler::TaskScheduler;
     use crate::mongodb_manager::mongodb_manager::MongoDbManager;
+    use crate::task::task::Task;
 
     #[tokio::test]
     async fn send_task() {
@@ -104,5 +145,17 @@ mod test_task_scheduler {
         let scheduler = TaskScheduler::new(db_manager);
         let result1 = scheduler.find_pending_task().await;
         dbg!(&result1);
+    }
+
+    #[tokio::test]
+    async fn occupy_pending_task() {
+        let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
+        let db_manager = MongoDbManager::new(result, "Logger").unwrap();
+        let scheduler = TaskScheduler::new(db_manager);
+        let result1 = scheduler.find_pending_task().await.unwrap();
+
+        let task = &result1[0];
+        let result2 = scheduler.occupy_pending_task(task).await;
+        dbg!(&result2);
     }
 }

@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, ser, Serialize, Serializer};
 use serde::de::DeserializeOwned;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Task<ParamType: Debug + Serialize, StateType: Debug + Serialize> {
+pub struct Task<ParamType, StateType> {
     // for deduplicate purpose
     pub key: String,
     // metadata
@@ -41,7 +41,22 @@ pub struct TaskState {
     pub progress: Option<u32>,
 }
 
-impl<ParamType: Debug + Serialize, StateType: Debug + Serialize> Task<ParamType, StateType> {
+impl TaskState {
+    pub fn init(start_time: &DateTime<Local>, worker_id: i64, task_option: &TaskOptions) -> TaskState {
+        let next_ping_time = *start_time + chrono::Duration::from_std(task_option.ping_interval).unwrap();
+        TaskState {
+            start_time: Some(*start_time),
+            ping_time: Some(*start_time),
+            next_ping_time:Some(next_ping_time),
+            next_retry_time: None,
+            complete_time: None,
+            current_worker_id: Some(worker_id),
+            progress: None,
+        }
+    }
+}
+
+impl<'de, ParamType: Debug + Serialize + Deserialize<'de>, StateType: Debug + Serialize + Deserialize<'de>> Task<ParamType, StateType> {
     pub fn generate_key_doc(&self) -> Document {
         doc! {
             "key":&self.key
