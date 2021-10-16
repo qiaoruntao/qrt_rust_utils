@@ -1,14 +1,11 @@
-use std::fmt::Debug;
-
-use chrono::{Date, Local};
+use chrono::Local;
 use futures::TryStreamExt;
 use mongodb::bson::Bson::Null;
 use mongodb::bson::doc;
 use mongodb::bson::Document;
-use mongodb::Collection;
-use mongodb::options::InsertOneOptions;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::fmt::Debug;
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskMeta, TaskOptions, TaskState};
@@ -57,12 +54,12 @@ impl TaskScheduler {
 
     // find tasks that we can process
     pub async fn find_pending_task(&self) -> Result<Box<Vec<Task<i32, i32>>>, Box<dyn std::error::Error>> {
-        let mut options = mongodb::options::FindOptions::default();
+        let options = mongodb::options::FindOptions::default();
         let collection = self.db_manager.get_collection::<Task<i32, i32>>("live_record");
 
         let filter = TaskScheduler::generate_pending_task_condition();
         // dbg!(&filter);
-        let mut cursor = collection.find(filter, Some(options)).await?;
+        let cursor = collection.find(filter, Some(options)).await?;
         let result = cursor.try_collect::<Vec<_>>().await?;
         dbg!(&result);
         // println!("ok");
@@ -123,19 +120,16 @@ impl TaskScheduler {
 
 #[cfg(test)]
 mod test_task_scheduler {
-    use std::error::Error;
-
     use crate::config_manage::config_manager::ConfigManager;
     use crate::db_task::task_scheduler::TaskScheduler;
     use crate::mongodb_manager::mongodb_manager::MongoDbManager;
-    use crate::task::task::Task;
 
     #[tokio::test]
     async fn send_task() {
         let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
         let db_manager = MongoDbManager::new(result, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager);
-        scheduler.send_task().await;
+        scheduler.send_task().await.unwrap();
     }
 
     #[tokio::test]
@@ -143,7 +137,7 @@ mod test_task_scheduler {
         let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
         let db_manager = MongoDbManager::new(result, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager);
-        let result1 = scheduler.find_pending_task().await;
+        let result1 = scheduler.find_pending_task().await.unwrap();
         dbg!(&result1);
     }
 

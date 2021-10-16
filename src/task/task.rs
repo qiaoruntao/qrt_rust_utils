@@ -2,11 +2,11 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::time::Duration;
 
-use chrono::{Date, DateTime, Local};
+use chrono::{DateTime, Local};
 use mongodb::bson::doc;
 use mongodb::bson::Document;
 use serde::{Deserialize, Deserializer, ser, Serialize, Serializer};
-use serde::de::DeserializeOwned;
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Task<ParamType, StateType> {
@@ -47,7 +47,7 @@ impl TaskState {
         TaskState {
             start_time: Some(*start_time),
             ping_time: Some(*start_time),
-            next_ping_time:Some(next_ping_time),
+            next_ping_time: Some(next_ping_time),
             next_retry_time: None,
             complete_time: None,
             current_worker_id: Some(worker_id),
