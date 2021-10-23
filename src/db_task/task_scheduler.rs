@@ -5,13 +5,32 @@ use futures::TryStreamExt;
 use mongodb::bson::Bson::Null;
 use mongodb::bson::doc;
 use mongodb::bson::Document;
+use mongodb::bson::oid::ObjectId;
 use mongodb::Cursor;
+use mongodb::error::{ErrorKind, WriteFailure};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tracing::debug;
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskState};
+
+#[derive(thiserror::Error, Debug)]
+pub enum TaskSchedulerError {
+    #[error("task exists")]
+    TaskExists,
+    #[error("no pending task exists")]
+    NoPendingTask,
+    #[error("no task matched")]
+    NoMatchedTask,
+    #[error("cannot complete task")]
+    CompleteTaskFailed,
+    #[error("cannot complete task")]
+    CancelTaskFailed,
+    #[error(transparent)]
+    MongoDbError(#[from] mongodb::error::Error),
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
 
 pub struct TaskScheduler {
     db_manager: MongoDbManager,
@@ -24,32 +43,58 @@ impl TaskScheduler {
         }
     }
 
-    pub async fn send_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), Box<dyn std::error::Error>>
+    pub async fn send_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<ObjectId, TaskSchedulerError>
         where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync {
-        let mut options = mongodb::options::ReplaceOptions::default();
-        options.upsert = Some(true);
+        let options = mongodb::options::InsertOneOptions::default();
 
         let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
-        let send_result = collection.replace_one(task.generate_key_doc(), task, Some(options)).await?;
-        dbg!(&send_result);
-        let matched_cnt = send_result.matched_count;
-        if matched_cnt == 0 {
-            debug!("exists {} records", matched_cnt)
-        }
-        if send_result.modified_count == 0 {
-            Err("insert failed".into())
-        } else {
-            Ok(())
+        match collection.insert_one(task, options).await {
+            Ok(insert_result) => {
+                Ok(insert_result.inserted_id.as_object_id().unwrap())
+            }
+            Err(e) => {
+                match e.kind.as_ref() {
+                    ErrorKind::Write(WriteFailure::WriteError(write_error)) => {
+                        if write_error.code == 11000 {
+                            return Err(TaskSchedulerError::TaskExists);
+                        }
+                    }
+                    _ => {}
+                }
+                Err(e.into())
+            }
         }
     }
 
     // find tasks that we can process
-    pub async fn find_all_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Vec<Task<ParamType, StateType>>, Box<dyn std::error::Error>>
+    pub async fn find_next_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Task<ParamType, StateType>, TaskSchedulerError>
         where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, {
         let result = self.find_pending_task::<ParamType, StateType>(custom_filter).await;
         return match result {
             Err(e) => {
-                Err(e.into())
+                Err(e)
+            }
+            Ok(mut cursor) => {
+                let cursor_result = cursor.try_next().await?;
+                match cursor_result {
+                    Some(result) => {
+                        Ok(result)
+                    }
+                    None => {
+                        Err(TaskSchedulerError::NoPendingTask)
+                    }
+                }
+            }
+        };
+    }
+
+    // find tasks that we can process
+    pub async fn find_all_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Vec<Task<ParamType, StateType>>, TaskSchedulerError>
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, {
+        let result = self.find_pending_task::<ParamType, StateType>(custom_filter).await;
+        return match result {
+            Err(e) => {
+                Err(e)
             }
             Ok(cursor) => {
                 let cursor_result = cursor.try_collect::<Vec<Task<ParamType, StateType>>>().await;
@@ -66,7 +111,7 @@ impl TaskScheduler {
     }
 
     // find tasks that we can process
-    pub async fn find_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Cursor<Task<ParamType, StateType>>, Box<dyn std::error::Error>>
+    pub async fn find_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Cursor<Task<ParamType, StateType>>, TaskSchedulerError>
         where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, {
         let options = mongodb::options::FindOptions::default();
         let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
@@ -106,7 +151,7 @@ impl TaskScheduler {
     }
 
     // lock the task we want to handle
-    pub async fn occupy_pending_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), Box<dyn std::error::Error>>
+    pub async fn occupy_pending_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
         where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
         let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
 
@@ -136,7 +181,7 @@ impl TaskScheduler {
     }
 
     // mark task as completed
-    pub async fn complete_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), Box<dyn std::error::Error>>
+    pub async fn complete_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
         where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
         let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
 
@@ -164,16 +209,16 @@ impl TaskScheduler {
         let result = collection.update_one(filter, update, Some(options)).await?;
         dbg!(&result);
         if result.matched_count == 0 {
-            Err("no matched task is found".into())
+            Err(TaskSchedulerError::NoMatchedTask)
         } else if result.modified_count == 0 {
-            Err("modify failed".into())
+            Err(TaskSchedulerError::CompleteTaskFailed)
         } else {
             Ok(())
         }
     }
 
     // mark task as cancelled
-    pub async fn cancel_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), Box<dyn std::error::Error>>
+    pub async fn cancel_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
         where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
         let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
 
@@ -200,9 +245,9 @@ impl TaskScheduler {
         let result = collection.update_one(filter, update, Some(options)).await?;
         dbg!(&result);
         if result.matched_count == 0 {
-            Err("no matched task is found".into())
+            Err(TaskSchedulerError::NoMatchedTask)
         } else if result.modified_count == 0 && result.upserted_id == None {
-            Err("insert failed".into())
+            Err(TaskSchedulerError::CancelTaskFailed)
         } else {
             Ok(())
         }

@@ -27,10 +27,13 @@ derive_builder = "0.10.2"
 async-recursion = "0.3.2"
 regex = "1.5.4"
 futures = "0.3.17"
+thiserror = "1.0.30"
+anyhow = "1.0.44"
 [dev-dependencies]
 qrt_rust_macros = { path = 'qrt_rust_macros' }
 [workspace]
-members = ["qrt_rust_macros"]
+members = ["qrt_rust_macros",
+]
 exclude = []
 
 [features]
