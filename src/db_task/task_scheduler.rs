@@ -22,6 +22,8 @@ pub enum TaskSchedulerError {
     NoPendingTask,
     #[error("no task matched")]
     NoMatchedTask,
+    #[error("cannot occupy task")]
+    OccupyTaskFailed,
     #[error("cannot complete task")]
     CompleteTaskFailed,
     #[error("cannot complete task")]
@@ -177,6 +179,11 @@ impl TaskScheduler {
 
         let result = collection.update_one(filter, update, Some(options)).await?;
         dbg!(&result);
+        if result.matched_count==0{
+            TaskSchedulerError::NoMatchedTask
+        }else if result.modified_count==0{
+            TaskSchedulerError::CompleteTaskFailed
+        }
         Ok(())
     }
 
