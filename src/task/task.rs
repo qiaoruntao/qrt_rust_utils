@@ -24,7 +24,7 @@ pub struct Task<ParamType, StateType> {
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TaskState {
     #[serde(serialize_with = "serialize_datetime_option_as_datetime", deserialize_with = "deserialize_datetime_as_datetime_option")]
     pub start_time: Option<DateTime<Local>>,
@@ -164,7 +164,7 @@ pub struct TaskOptions {
     pub retry_for_unexpected: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TaskMeta {
     // human friendly task name
     pub name: String,
