@@ -7,8 +7,7 @@ use mongodb::bson::doc;
 use mongodb::bson::Document;
 use serde::{Deserialize, Deserializer, ser, Serialize, Serializer};
 
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Task<ParamType, StateType> {
     // for deduplicate purpose
     pub key: String,

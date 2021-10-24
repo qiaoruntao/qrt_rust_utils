@@ -29,6 +29,7 @@ regex = "1.5.4"
 futures = "0.3.17"
 thiserror = "1.0.30"
 anyhow = "1.0.44"
+async-trait = "0.1.51"
 [dev-dependencies]
 qrt_rust_macros = { path = 'qrt_rust_macros' }
 [workspace]

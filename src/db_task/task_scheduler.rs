@@ -1,6 +1,10 @@
+use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::fmt::Debug;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
-use chrono::Local;
+use chrono::{Duration, Local};
 use futures::TryStreamExt;
 use mongodb::bson::Bson::Null;
 use mongodb::bson::doc;
@@ -22,6 +26,10 @@ pub enum TaskSchedulerError {
     NoPendingTask,
     #[error("no task matched")]
     NoMatchedTask,
+    #[error("maintainer error")]
+    MaintainerError,
+    #[error("task failed")]
+    TaskFailedError,
     #[error("cannot occupy task")]
     OccupyTaskFailed,
     #[error("cannot complete task")]
@@ -35,21 +43,21 @@ pub enum TaskSchedulerError {
 }
 
 pub struct TaskScheduler {
-    db_manager: MongoDbManager,
+    db_manager: Mutex<MongoDbManager>,
 }
 
 impl TaskScheduler {
     pub fn new(db_manager: MongoDbManager) -> TaskScheduler {
         TaskScheduler {
-            db_manager
+            db_manager: Mutex::new(db_manager)
         }
     }
 
     pub async fn send_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<ObjectId, TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync {
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync {
         let options = mongodb::options::InsertOneOptions::default();
 
-        let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
+        let collection = self.db_manager.lock().as_ref().unwrap().get_collection::<Task<ParamType, StateType>>("live_record");
         match collection.insert_one(task, options).await {
             Ok(insert_result) => {
                 Ok(insert_result.inserted_id.as_object_id().unwrap())
@@ -69,8 +77,8 @@ impl TaskScheduler {
     }
 
     // find tasks that we can process
-    pub async fn find_next_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Task<ParamType, StateType>, TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, {
+    pub async fn find_next_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Arc<RefCell<Task<ParamType, StateType>>>, TaskSchedulerError>
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, {
         let result = self.find_pending_task::<ParamType, StateType>(custom_filter).await;
         return match result {
             Err(e) => {
@@ -80,7 +88,7 @@ impl TaskScheduler {
                 let cursor_result = cursor.try_next().await?;
                 match cursor_result {
                     Some(result) => {
-                        Ok(result)
+                        Ok(Arc::new(RefCell::new(result)))
                     }
                     None => {
                         Err(TaskSchedulerError::NoPendingTask)
@@ -92,7 +100,7 @@ impl TaskScheduler {
 
     // find tasks that we can process
     pub async fn find_all_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Vec<Task<ParamType, StateType>>, TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, {
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, {
         let result = self.find_pending_task::<ParamType, StateType>(custom_filter).await;
         return match result {
             Err(e) => {
@@ -114,9 +122,9 @@ impl TaskScheduler {
 
     // find tasks that we can process
     pub async fn find_pending_task<ParamType, StateType>(&self, custom_filter: Option<Document>) -> Result<Cursor<Task<ParamType, StateType>>, TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Send + Sync, {
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync, {
         let options = mongodb::options::FindOptions::default();
-        let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
+        let collection = self.db_manager.lock().as_ref().unwrap().get_collection::<Task<ParamType, StateType>>("live_record");
 
         let filter = TaskScheduler::generate_pending_task_condition(custom_filter);
         // dbg!(&filter);
@@ -126,6 +134,7 @@ impl TaskScheduler {
         Ok(cursor)
     }
 
+    //noinspection RsExtraSemicolon
     fn generate_pending_task_condition(custom_filter: Option<Document>) -> Document {
         let mut conditions = vec![
             doc! {"task_state.complete_time":Null},
@@ -153,10 +162,11 @@ impl TaskScheduler {
     }
 
     // lock the task we want to handle
-    pub async fn occupy_pending_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
-        let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
-
+    pub async fn occupy_pending_task<ParamType, StateType>(&self, task: Arc<RefCell<Task<ParamType, StateType>>>) -> Result<(), TaskSchedulerError>
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, {
+        let collection = self.db_manager.lock().as_ref().unwrap().get_collection::<Task<ParamType, StateType>>("live_record");
+        let x: &RefCell<Task<ParamType, StateType>> = task.borrow();
+        let task = x.borrow();
         let basic_filter = TaskScheduler::generate_pending_task_condition(None);
         // we need to make sure the task is still pending
         let filter = doc! {
@@ -179,27 +189,66 @@ impl TaskScheduler {
 
         let result = collection.update_one(filter, update, Some(options)).await?;
         dbg!(&result);
-        if result.matched_count==0{
-            TaskSchedulerError::NoMatchedTask
-        }else if result.modified_count==0{
-            TaskSchedulerError::CompleteTaskFailed
+        if result.matched_count == 0 {
+            Err(TaskSchedulerError::NoMatchedTask)
+        } else if result.modified_count == 0 {
+            Err(TaskSchedulerError::CompleteTaskFailed)
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
-    // mark task as completed
-    pub async fn complete_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
-        let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
+    // update task ping time
+    pub async fn update_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, {
+        let collection = self.db_manager.lock().as_ref().unwrap().get_collection::<Task<ParamType, StateType>>("live_record");
 
-        // we need to make sure the task is being processed by ourself
+        let mut options = mongodb::options::UpdateOptions::default();
+        options.upsert = Some(false);
+
+        let basic_filter = TaskScheduler::generate_occupied_filter(task);
         let filter = doc! {
+            "$and":[
+                basic_filter,
+                {"key":&task.key}
+            ]
+        };
+        let next_ping_time = Local::now() + chrono::Duration::from_std(task.option.ping_interval).unwrap();
+        let update = doc! {
+            "$set":{
+                "task_state.next_ping_time": mongodb::bson::DateTime::from_chrono(next_ping_time),
+                "task_state.ping_time": mongodb::bson::DateTime::now(),
+            }
+        };
+
+        let result = collection.update_one(filter, update, Some(options)).await?;
+
+        if result.matched_count == 0 {
+            Err(TaskSchedulerError::NoMatchedTask)
+        } else if result.modified_count == 0 {
+            Err(TaskSchedulerError::CompleteTaskFailed)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn generate_occupied_filter<ParamType, StateType>(task: &Task<ParamType, StateType>) -> Document {
+        doc! {
             "task_state.complete_time": mongodb::bson::Bson::Null,
             "task_state.current_worker_id": &task.task_state.current_worker_id,
             "task_state.next_ping_time": { "$gte": mongodb::bson::DateTime::now() },
             "task_state.ping_time": { "$lte": mongodb::bson::DateTime::now() },
             "key":&task.key
-        };
+        }
+    }
+
+    // mark task as completed
+    pub async fn complete_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, {
+        let collection = self.db_manager.lock().as_ref().unwrap().get_collection::<Task<ParamType, StateType>>("live_record");
+
+        // we need to make sure the task is being processed by ourself
+        let filter = TaskScheduler::generate_occupied_filter(task);
         let update = doc! {
             "$set":{
                 "task_state.complete_time":mongodb::bson::DateTime::now(),
@@ -226,8 +275,8 @@ impl TaskScheduler {
 
     // mark task as cancelled
     pub async fn cancel_task<ParamType, StateType>(&self, task: &Task<ParamType, StateType>) -> Result<(), TaskSchedulerError>
-        where ParamType: Debug + Serialize + DeserializeOwned + Unpin, StateType: Debug + Serialize + DeserializeOwned + Unpin, {
-        let collection = self.db_manager.get_collection::<Task<ParamType, StateType>>("live_record");
+        where ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, {
+        let collection = self.db_manager.lock().as_ref().unwrap().get_collection::<Task<ParamType, StateType>>("live_record");
 
         // we need to make sure the task is being processed by ourself
         let filter = doc! {
@@ -263,6 +312,9 @@ impl TaskScheduler {
 
 #[cfg(test)]
 mod test_task_scheduler {
+    use std::cell::RefCell;
+    use std::sync::Arc;
+
     use chrono::Local;
     use futures::TryStreamExt;
     use tracing::error;
@@ -325,7 +377,7 @@ mod test_task_scheduler {
             }
             Ok(task) => task.unwrap(),
         };
-        let occupy_result = scheduler.occupy_pending_task(&task).await;
+        let occupy_result = scheduler.occupy_pending_task(Arc::new(RefCell::new(task))).await;
         dbg!(&occupy_result);
         let complete_result = scheduler.complete_task(&task).await;
         dbg!(&complete_result);
@@ -346,7 +398,7 @@ mod test_task_scheduler {
             Ok(task) => task.unwrap(),
         };
 
-        let occupy_result = scheduler.occupy_pending_task(&task).await;
+        let occupy_result = scheduler.occupy_pending_task(Arc::new(RefCell::new(task))).await;
         dbg!(&occupy_result);
         let complete_result = scheduler.cancel_task(&task).await;
         dbg!(&complete_result);
