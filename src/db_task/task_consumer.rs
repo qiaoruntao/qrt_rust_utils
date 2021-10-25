@@ -1,4 +1,4 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -35,36 +35,6 @@ pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned
     async fn remove_running_task(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> bool;
     // maintain task
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>);
-    // continue to run a consumer
-    async fn run_consumer(&'static self, task_scheduler: Arc<RwLock<TaskScheduler>>) {
-        let filter = self.build_filter();
-        loop {
-            // maintain
-            self.run_maintainer(task_scheduler.clone());
-            // find a task
-            let guard = task_scheduler.try_read().unwrap();
-            let result = guard.find_next_pending_task(filter.clone()).await;
-            let task = match result {
-                Ok(task) => task,
-                Err(e) => {
-                    match e {
-                        TaskSchedulerError::NoPendingTask => {
-                            // wait a while
-                            tokio::time::sleep(Duration::from_secs(5)).await;
-                            continue;
-                        }
-                        _ => {
-                            // unexpected error
-                            error!("{:?}", e);
-                            break;
-                        }
-                    }
-                }
-            };
-            // send to background
-            tokio::spawn(self.run_task_core(task_scheduler.clone(), task));
-        };
-    }
 
     async fn run_task_core(&self, task_scheduler: Arc<RwLock<TaskScheduler>>, task: Arc<RwLock<Task<ParamType, StateType>>>) -> Result<(), TaskSchedulerError> {
         // occupy the task
@@ -116,27 +86,27 @@ pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned
 }
 
 pub struct WebcastConsumer {
-    running_tasks: Mutex<Vec<Arc<RwLock<Task<(), ()>>>>>,
+    running_tasks: Mutex<Vec<Arc<RwLock<Task<i32, i32>>>>>,
 }
 
 #[async_trait]
-impl<ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq, StateType: 'static + Debug + Send + Serialize + DeserializeOwned + Unpin + Sync + PartialEq> TaskConsumer<ParamType, StateType> for WebcastConsumer {
+impl TaskConsumer<i32, i32> for WebcastConsumer {
     fn build_filter(&self) -> Option<Document> {
         None
     }
 
-    fn consume(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> TaskConsumerResult {
+    fn consume(&self, task: Arc<RwLock<Task<i32, i32>>>) -> TaskConsumerResult {
         info!("task {} consumed", &task.try_read().unwrap().key);
         TaskConsumerResult::Completed
     }
 
-    async fn add_running_task(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> bool {
+    async fn add_running_task(&self, task: Arc<RwLock<Task<i32, i32>>>) -> bool {
         let mut guard = self.running_tasks.lock().await;
         guard.borrow_mut().push(task);
         true
     }
 
-    async fn remove_running_task(&self, task2remove: Arc<RwLock<Task<ParamType, StateType>>>) -> bool {
+    async fn remove_running_task(&self, task2remove: Arc<RwLock<Task<i32, i32>>>) -> bool {
         let mut guard = self.running_tasks.lock().await;
         for (index, task) in guard.iter().enumerate() {
             if task.try_read().unwrap().deref() == task2remove.try_read().unwrap().deref() {
@@ -149,7 +119,6 @@ impl<ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + 
 
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>) {
         info!("maintainer runs");
-        tokio::time::sleep(Duration::from_secs(10));
         let guard = self.running_tasks.lock().await;
         let scheduler_guard = task_scheduler.try_read().unwrap();
         for running_task in guard.iter() {
@@ -170,20 +139,66 @@ mod test_task_scheduler {
     use std::sync::Arc;
 
     use tokio::sync::RwLock;
+    use tokio::time::Duration;
+    use tracing::error;
+    use tracing::info;
 
     use crate::config_manage::config_manager::ConfigManager;
     use crate::db_task::task_consumer::{TaskConsumer, WebcastConsumer};
-    use crate::db_task::task_scheduler::TaskScheduler;
+    use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
+    use crate::logger::logger::Logger;
     use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 
-    #[test]
-    fn test() {
-        let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
-        let db_manager = MongoDbManager::new(result, "Logger").unwrap();
+    #[tokio::test]
+    async fn test() {
+        let logger_config = ConfigManager::read_config_with_directory("./config/logger").unwrap();
+        Logger::init_logger(&logger_config);
+        let mongodb_config = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
+        let db_manager = MongoDbManager::new(mongodb_config, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager);
         let webcast_consumer = WebcastConsumer {
             running_tasks: Default::default()
         };
-        webcast_consumer.run_consumer(Arc::new(RwLock::new(scheduler)));
+        let arc_scheduler = Arc::new(RwLock::new(scheduler));
+        let arc_consumer = Arc::new(RwLock::new(webcast_consumer));
+        loop {
+            let arc1 = arc_consumer.clone();
+            let consumer = arc1.try_read().unwrap();
+            let filter = consumer.build_filter();
+            // maintain
+            let arc2 = arc_scheduler.clone();
+            consumer.run_maintainer(arc2.clone()).await;
+            drop(consumer);
+            // find a task
+            let guard = arc2.try_read().unwrap();
+            let result = guard.find_next_pending_task(filter.clone()).await;
+            let task = match result {
+                Ok(task) => task,
+                Err(e) => {
+                    match e {
+                        TaskSchedulerError::NoPendingTask => {
+                            info!("no pending task found");
+                            // wait a while
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            // continue;
+                            break;
+                        }
+                        _ => {
+                            // unexpected error
+                            error!("{:?}", e);
+                            // break;
+                            break;
+                        }
+                    }
+                }
+            };
+            drop(guard);
+            // send to background
+            tokio::spawn(async move {
+                let arc = arc1;
+                let consumer = arc.try_read().unwrap();
+                consumer.run_task_core(arc2, task).await;
+            });
+        }
     }
 }

@@ -1,4 +1,6 @@
 use derive_builder::Builder;
+use serde::Deserialize;
+use serde::Serialize;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::time::ChronoLocal;
 use tracing_subscriber::layer::SubscriberExt;
@@ -9,7 +11,7 @@ use crate::logger::fluentd_layer::{FluentdLayer, FluentdLayerConfig};
 
 pub struct Logger {}
 
-#[derive(Debug, Builder)]
+#[derive(Debug, Builder, Serialize, Deserialize)]
 pub struct LoggerConfig {
     pub with_fluentd: bool,
 }
