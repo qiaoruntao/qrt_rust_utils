@@ -1,19 +1,13 @@
 use std::borrow::BorrowMut;
-use std::cell::RefCell;
-use std::collections::HashSet;
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
-use mongodb::bson::Bson::ObjectId;
 use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{Instant, interval_at};
 use tracing::{error, info};
 
 use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
@@ -26,7 +20,11 @@ pub enum TaskConsumerResult {
 }
 
 #[async_trait]
-pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send> {
+pub trait TaskConsumer<
+    ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+    StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+>
+{
     fn build_filter(&self) -> Option<Document>;
     // define how to consume a task
     async fn consume(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> TaskConsumerResult;
@@ -36,7 +34,11 @@ pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned
     // maintain task
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>);
 
-    async fn run_task_core(&self, task_scheduler: Arc<RwLock<TaskScheduler>>, task: Arc<RwLock<Task<ParamType, StateType>>>) -> Result<(), TaskSchedulerError> {
+    async fn run_task_core(
+        &self,
+        task_scheduler: Arc<RwLock<TaskScheduler>>,
+        task: Arc<RwLock<Task<ParamType, StateType>>>,
+    ) -> Result<(), TaskSchedulerError> {
         let task_scheduler_guard = task_scheduler.try_read().unwrap();
         // background maintainer
         let key = &task.try_read().unwrap().key;
@@ -57,12 +59,8 @@ pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned
         }
         // update result
         match consumer_result.await {
-            TaskConsumerResult::Completed => {
-                task_scheduler_guard.complete_task(task.clone()).await
-            }
-            TaskConsumerResult::Cancelled => {
-                task_scheduler_guard.cancel_task(task.clone()).await
-            }
+            TaskConsumerResult::Completed => task_scheduler_guard.complete_task(task.clone()).await,
+            TaskConsumerResult::Cancelled => task_scheduler_guard.cancel_task(task.clone()).await,
             TaskConsumerResult::Failed => {
                 // TODO: do nothing, wait for timeout retry
                 Err(TaskSchedulerError::TaskFailedError)
@@ -113,19 +111,17 @@ impl TaskConsumer<i32, i32> for WebcastConsumer {
             match update_result {
                 Ok(_) => {}
                 Err(e) => {
-                    dbg!("{:?}",e);
+                    dbg!("{:?}", e);
                 }
             }
         }
     }
 }
 
-
 #[cfg(test)]
 mod test_task_scheduler {
     use std::sync::Arc;
 
-    use futures::future::err;
     use tokio::sync::RwLock;
     use tokio::time::Duration;
     use tracing::error;
@@ -145,7 +141,7 @@ mod test_task_scheduler {
         let db_manager = MongoDbManager::new(mongodb_config, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager);
         let webcast_consumer = WebcastConsumer {
-            running_tasks: Default::default()
+            running_tasks: Default::default(),
         };
         let arc_scheduler = Arc::new(RwLock::new(scheduler));
         let arc_consumer = Arc::new(RwLock::new(webcast_consumer));
@@ -160,7 +156,9 @@ mod test_task_scheduler {
             // find a task
             let task_scheduler_guard = arc2.try_read().unwrap();
             // TODO: merge find and occupy for relentless check
-            let result = task_scheduler_guard.find_next_pending_task(filter.clone()).await;
+            let result = task_scheduler_guard
+                .find_next_pending_task(filter.clone())
+                .await;
             let task = match result {
                 Ok(task) => task,
                 Err(e) => {
@@ -190,7 +188,7 @@ mod test_task_scheduler {
                         info!("occupy task failed, {:?}", e);
                     }
                     _ => {
-                        error!("unknown error while occupying task {:?}",e);
+                        error!("unknown error while occupying task {:?}", e);
                     }
                 }
             }

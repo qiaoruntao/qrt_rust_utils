@@ -1,5 +1,4 @@
 /// this file is copied from https://github.com/kardeiz/sanitize-filename/blob/master/src/lib.rs
-
 use lazy_static::lazy_static;
 use regex::{Regex, RegexBuilder};
 
@@ -7,10 +6,11 @@ lazy_static! {
     static ref ILLEGAL_RE: Regex = Regex::new(r#"[/\?<>\\:\*\|":]"#).unwrap();
     static ref CONTROL_RE: Regex = Regex::new(r#"[\x00-\x1f\x80-\x9f]"#).unwrap();
     static ref RESERVED_RE: Regex = Regex::new(r#"^\.+$"#).unwrap();
-    static ref WINDOWS_RESERVED_RE: Regex = RegexBuilder::new(r#"(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$"#)
-        .case_insensitive(true)
-        .build()
-        .unwrap();
+    static ref WINDOWS_RESERVED_RE: Regex =
+        RegexBuilder::new(r#"(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$"#)
+            .case_insensitive(true)
+            .build()
+            .unwrap();
     static ref WINDOWS_TRAILING_RE: Regex = Regex::new(r#"^\.+$"#).unwrap();
 }
 
@@ -34,7 +34,10 @@ pub fn sanitize<S: AsRef<str>>(name: S) -> String {
 }
 
 pub fn sanitize_with_options<S: AsRef<str>>(name: S, options: SanitizeOption) -> String {
-    let SanitizeOption { windows, replacement } = options;
+    let SanitizeOption {
+        windows,
+        replacement,
+    } = options;
     let name = name.as_ref();
 
     let name = ILLEGAL_RE.replace_all(&name, replacement);
@@ -95,7 +98,7 @@ mod tests {
         "../../foobar",
         "./././foobar",
         "|*.what",
-        "LPT9.asdf"
+        "LPT9.asdf",
     ];
 
     static NAMES_CLEANED: &'static [&'static str] = &[
@@ -140,7 +143,7 @@ mod tests {
         "....foobar",
         "...foobar",
         ".what",
-        ""
+        "",
     ];
 
     #[test]
@@ -151,7 +154,10 @@ mod tests {
         };
 
         for (idx, name) in NAMES.iter().enumerate() {
-            assert_eq!(super::sanitize_with_options(name, options.clone()), NAMES_CLEANED[idx]);
+            assert_eq!(
+                super::sanitize_with_options(name, options.clone()),
+                NAMES_CLEANED[idx]
+            );
         }
     }
 }

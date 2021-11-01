@@ -9,7 +9,10 @@ use crate::downloader::download_info::DownloadInfo;
 pub struct Downloader {}
 // this module is under development
 impl Downloader {
-    async fn download_file(url: &str, filepath: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn download_file(
+        url: &str,
+        filepath: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let response = reqwest::get(url).await?;
         let mut file = std::fs::File::create(filepath)?;
         let mut content = std::io::Cursor::new(response.bytes().await?);
@@ -43,6 +46,8 @@ impl Downloader {
             temp.complete_time = Some(Local::now());
             temp
         };
-        Downloader::download_file(url.as_str(), download_path_str).await.unwrap();
+        Downloader::download_file(url.as_str(), download_path_str)
+            .await
+            .unwrap();
     }
 }

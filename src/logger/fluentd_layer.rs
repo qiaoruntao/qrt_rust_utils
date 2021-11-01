@@ -7,10 +7,10 @@ use fruently::forwardable::JsonForwardable;
 use fruently::retry_conf::RetryConf;
 use serde::{Deserialize, Serialize};
 use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
-use tracing::{Event, Level, Subscriber};
 use tracing::field::{Field, Visit};
-use tracing_subscriber::Layer;
+use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::layer::Context;
+use tracing_subscriber::Layer;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct FluentdLogLocation {

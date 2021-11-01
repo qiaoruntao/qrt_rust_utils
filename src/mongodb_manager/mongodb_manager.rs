@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
-use mongodb::{Client, options::ClientOptions};
-use mongodb::{Collection, Database};
-use mongodb::options::{Credential, Tls, TlsOptions};
 use mongodb::options::ServerAddress::Tcp;
+use mongodb::options::{Credential, Tls, TlsOptions};
+use mongodb::{options::ClientOptions, Client};
+use mongodb::{Collection, Database};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -61,8 +61,8 @@ impl MongoDbManager {
 // collections
 impl MongoDbManager {
     pub fn get_collection<K>(&self, collection_name: &str) -> Collection<K>
-        where
-            K: Serialize + DeserializeOwned + Unpin + Debug,
+    where
+        K: Serialize + DeserializeOwned + Unpin + Debug,
     {
         self.db.collection::<K>(collection_name)
     }
