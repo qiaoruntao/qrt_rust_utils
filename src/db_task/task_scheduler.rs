@@ -355,8 +355,9 @@ mod test_task_scheduler {
         let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
         let db_manager = MongoDbManager::new(result, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager);
+        let name = Local::now().timestamp().to_string();
         let task = Task {
-            key: "test".to_string(),
+            key: name,
             meta: TaskMeta {
                 name: "test".to_string(),
                 create_time: Local::now(),

@@ -29,7 +29,7 @@ pub enum TaskConsumerResult {
 pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send, StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send> {
     fn build_filter(&self) -> Option<Document>;
     // define how to consume a task
-    fn consume(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> TaskConsumerResult;
+    async fn consume(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> TaskConsumerResult;
     // used to run background maintain
     async fn add_running_task(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> bool;
     async fn remove_running_task(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> bool;
@@ -37,21 +37,7 @@ pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>);
 
     async fn run_task_core(&self, task_scheduler: Arc<RwLock<TaskScheduler>>, task: Arc<RwLock<Task<ParamType, StateType>>>) -> Result<(), TaskSchedulerError> {
-        // occupy the task
-        let guard = task_scheduler.try_read().unwrap();
-        match guard.occupy_pending_task::<ParamType, StateType>(task.clone()).await {
-            Err(e) => {
-                match e {
-                    TaskSchedulerError::OccupyTaskFailed | TaskSchedulerError::NoMatchedTask => {
-                        // this is ok
-                    }
-                    _ => {}
-                }
-            }
-            Ok(_) => {
-                // occupied
-            }
-        }
+        let task_scheduler_guard = task_scheduler.try_read().unwrap();
         // background maintainer
         let key = &task.try_read().unwrap().key;
         let is_added = self.add_running_task(task.clone()).await;
@@ -70,12 +56,12 @@ pub trait TaskConsumer<ParamType: 'static + Debug + Serialize + DeserializeOwned
             return Err(TaskSchedulerError::MaintainerError);
         }
         // update result
-        match consumer_result {
+        match consumer_result.await {
             TaskConsumerResult::Completed => {
-                guard.complete_task(task.clone()).await
+                task_scheduler_guard.complete_task(task.clone()).await
             }
             TaskConsumerResult::Cancelled => {
-                guard.cancel_task(task.clone()).await
+                task_scheduler_guard.cancel_task(task.clone()).await
             }
             TaskConsumerResult::Failed => {
                 // TODO: do nothing, wait for timeout retry
@@ -95,8 +81,9 @@ impl TaskConsumer<i32, i32> for WebcastConsumer {
         None
     }
 
-    fn consume(&self, task: Arc<RwLock<Task<i32, i32>>>) -> TaskConsumerResult {
+    async fn consume(&self, task: Arc<RwLock<Task<i32, i32>>>) -> TaskConsumerResult {
         info!("task {} consumed", &task.try_read().unwrap().key);
+
         TaskConsumerResult::Completed
     }
 
@@ -118,8 +105,8 @@ impl TaskConsumer<i32, i32> for WebcastConsumer {
     }
 
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>) {
-        info!("maintainer runs");
         let guard = self.running_tasks.lock().await;
+        info!("maintainer runs, task count= {}", guard.len());
         let scheduler_guard = task_scheduler.try_read().unwrap();
         for running_task in guard.iter() {
             let update_result = scheduler_guard.update_task(running_task.clone()).await;
@@ -138,6 +125,7 @@ impl TaskConsumer<i32, i32> for WebcastConsumer {
 mod test_task_scheduler {
     use std::sync::Arc;
 
+    use futures::future::err;
     use tokio::sync::RwLock;
     use tokio::time::Duration;
     use tracing::error;
@@ -170,8 +158,9 @@ mod test_task_scheduler {
             consumer.run_maintainer(arc2.clone()).await;
             drop(consumer);
             // find a task
-            let guard = arc2.try_read().unwrap();
-            let result = guard.find_next_pending_task(filter.clone()).await;
+            let task_scheduler_guard = arc2.try_read().unwrap();
+            // TODO: merge find and occupy for relentless check
+            let result = task_scheduler_guard.find_next_pending_task(filter.clone()).await;
             let task = match result {
                 Ok(task) => task,
                 Err(e) => {
@@ -179,9 +168,9 @@ mod test_task_scheduler {
                         TaskSchedulerError::NoPendingTask => {
                             info!("no pending task found");
                             // wait a while
-                            tokio::time::sleep(Duration::from_secs(5)).await;
-                            // continue;
-                            break;
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                            // break;
                         }
                         _ => {
                             // unexpected error
@@ -192,12 +181,30 @@ mod test_task_scheduler {
                     }
                 }
             };
-            drop(guard);
+            info!("new task found");
+            // occupy the task
+            if let Err(e) = task_scheduler_guard.occupy_pending_task(task.clone()).await {
+                match e {
+                    TaskSchedulerError::OccupyTaskFailed | TaskSchedulerError::NoMatchedTask => {
+                        // this is ok
+                        info!("occupy task failed, {:?}", e);
+                    }
+                    _ => {
+                        error!("unknown error while occupying task {:?}",e);
+                    }
+                }
+            }
+            drop(task_scheduler_guard);
             // send to background
             tokio::spawn(async move {
                 let arc = arc1;
                 let consumer = arc.try_read().unwrap();
-                consumer.run_task_core(arc2, task).await;
+                match consumer.run_task_core(arc2, task).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("running task failed, {:?}", &e);
+                    }
+                }
             });
         }
     }
