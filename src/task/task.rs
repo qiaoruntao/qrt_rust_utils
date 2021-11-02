@@ -5,7 +5,7 @@ use std::time::Duration;
 use chrono::{DateTime, Local};
 use mongodb::bson::doc;
 use mongodb::bson::Document;
-use serde::{ser, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, ser, Serialize, Serializer};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Task<ParamType, StateType> {
@@ -26,33 +26,33 @@ pub struct Task<ParamType, StateType> {
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TaskState {
     #[serde(
-        serialize_with = "serialize_datetime_option_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime_option"
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub start_time: Option<DateTime<Local>>,
     #[serde(
-        serialize_with = "serialize_datetime_option_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime_option"
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub ping_time: Option<DateTime<Local>>,
     #[serde(
-        serialize_with = "serialize_datetime_option_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime_option"
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub next_ping_time: Option<DateTime<Local>>,
     #[serde(
-        serialize_with = "serialize_datetime_option_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime_option"
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub next_retry_time: Option<DateTime<Local>>,
     #[serde(
-        serialize_with = "serialize_datetime_option_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime_option"
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub complete_time: Option<DateTime<Local>>,
     #[serde(
-        serialize_with = "serialize_datetime_option_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime_option"
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub cancel_time: Option<DateTime<Local>>,
     pub current_worker_id: Option<i64>,
@@ -80,11 +80,26 @@ impl TaskState {
     }
 }
 
+impl Default for TaskState {
+    fn default() -> Self {
+        TaskState {
+            start_time: None,
+            ping_time: None,
+            next_ping_time: None,
+            next_retry_time: None,
+            complete_time: None,
+            cancel_time: None,
+            current_worker_id: None,
+            progress: None,
+        }
+    }
+}
+
 impl<
-        'de,
-        ParamType: Debug + Serialize + Deserialize<'de>,
-        StateType: Debug + Serialize + Deserialize<'de>,
-    > Task<ParamType, StateType>
+    'de,
+    ParamType: Debug + Serialize + Deserialize<'de>,
+    StateType: Debug + Serialize + Deserialize<'de>,
+> Task<ParamType, StateType>
 {
     pub fn generate_key_doc(&self) -> Document {
         doc! {
@@ -101,8 +116,8 @@ pub fn serialize_u32_as_i32<S: Serializer>(val: &u32, serializer: S) -> Result<S
 }
 
 pub fn deserialize_i32_as_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
-where
-    D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
 {
     let f = i32::deserialize(deserializer)?;
     Ok(f as u32)
@@ -116,8 +131,8 @@ pub fn serialize_duration_as_i64<S: Serializer>(
 }
 
 pub fn deserialize_i64_as_duration<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-where
-    D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
 {
     let ms_val = i64::deserialize(deserializer)?;
     Ok(Duration::from_millis(ms_val as u64))
@@ -136,8 +151,8 @@ pub fn serialize_duration_option_as_i64<S: Serializer>(
 pub fn deserialize_i64_as_duration_option<'de, D>(
     deserializer: D,
 ) -> Result<Option<Duration>, D::Error>
-where
-    D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
 {
     let ms_val = Option::<i64>::deserialize(deserializer)?;
     match ms_val {
@@ -162,8 +177,8 @@ pub fn serialize_datetime_option_as_datetime<S: Serializer>(
 pub fn deserialize_datetime_as_datetime_option<'de, D>(
     deserializer: D,
 ) -> Result<Option<DateTime<Local>>, D::Error>
-where
-    D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
 {
     let ms_val = Option::<mongodb::bson::DateTime>::deserialize(deserializer)?;
     match ms_val {
@@ -186,8 +201,8 @@ pub fn serialize_datetime_as_datetime<S: Serializer>(
 pub fn deserialize_datetime_as_datetime<'de, D>(
     deserializer: D,
 ) -> Result<DateTime<Local>, D::Error>
-where
-    D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
 {
     let datetime = mongodb::bson::DateTime::deserialize(deserializer)?;
     let time = datetime.to_chrono();
@@ -197,29 +212,29 @@ where
 #[derive(Debug, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 pub struct TaskOptions {
     #[serde(
-        serialize_with = "serialize_duration_option_as_i64",
-        deserialize_with = "deserialize_i64_as_duration_option"
+    serialize_with = "serialize_duration_option_as_i64",
+    deserialize_with = "deserialize_i64_as_duration_option"
     )]
     pub time_limit: Option<Duration>,
     #[serde(
-        serialize_with = "serialize_u32_as_i32",
-        deserialize_with = "deserialize_i32_as_u32"
+    serialize_with = "serialize_u32_as_i32",
+    deserialize_with = "deserialize_i32_as_u32"
     )]
     pub max_retries: u32,
     #[serde(
-        serialize_with = "serialize_duration_as_i64",
-        deserialize_with = "deserialize_i64_as_duration"
+    serialize_with = "serialize_duration_as_i64",
+    deserialize_with = "deserialize_i64_as_duration"
     )]
     pub min_retry_delay: Duration,
     #[serde(
-        serialize_with = "serialize_duration_as_i64",
-        deserialize_with = "deserialize_i64_as_duration"
+    serialize_with = "serialize_duration_as_i64",
+    deserialize_with = "deserialize_i64_as_duration"
     )]
     pub max_retry_delay: Duration,
     // how often should we update ping time
     #[serde(
-        serialize_with = "serialize_duration_as_i64",
-        deserialize_with = "deserialize_i64_as_duration"
+    serialize_with = "serialize_duration_as_i64",
+    deserialize_with = "deserialize_i64_as_duration"
     )]
     pub ping_interval: Duration,
     // should we retry after task throw error
@@ -232,12 +247,22 @@ pub struct TaskMeta {
     pub name: String,
     // when did the task create
     #[serde(
-        serialize_with = "serialize_datetime_as_datetime",
-        deserialize_with = "deserialize_datetime_as_datetime"
+    serialize_with = "serialize_datetime_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime"
     )]
     pub create_time: DateTime<Local>,
     // who create this task
     pub creator: String,
+}
+
+impl TaskMeta {
+    pub fn create_now(name: String, creator: String) -> Self {
+        TaskMeta {
+            name,
+            create_time: Local::now(),
+            creator,
+        }
+    }
 }
 
 impl Default for TaskOptions {

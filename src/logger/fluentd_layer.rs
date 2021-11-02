@@ -85,14 +85,14 @@ pub struct TestVisitor {
 
 impl Visit for TestVisitor {
     fn record_str(&mut self, field: &Field, value: &str) {
-        if field.name() == "message" {
+        if field.name() == "entity" {
             self.message = Some(value.into());
         }
         // dbg!(field, value);
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn Debug) {
-        if field.name() == "message" {
+        if field.name() == "entity" {
             self.message = Some(format!("{:?}", value));
         }
         // dbg!(field, value);
@@ -103,7 +103,7 @@ impl<S: Subscriber> Layer<S> for FluentdLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
         let metadata = event.metadata();
         // dbg!(event);
-        // try to get the message
+        // try to get the entity
         let mut visitor = TestVisitor { message: None };
         event.record(&mut visitor);
         let message = visitor.message.unwrap_or_default();

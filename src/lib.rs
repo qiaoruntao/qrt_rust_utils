@@ -10,7 +10,7 @@ pub use qrt_rust_macros::*;
 
 pub mod config_manage;
 pub mod db_task;
-pub mod domain;
+pub mod tg_notification;
 pub mod downloader;
 pub mod file_utils;
 pub mod logger;

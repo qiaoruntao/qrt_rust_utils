@@ -139,7 +139,7 @@ mod test_task_scheduler {
         Logger::init_logger(&logger_config);
         let mongodb_config = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
         let db_manager = MongoDbManager::new(mongodb_config, "Logger").unwrap();
-        let scheduler = TaskScheduler::new(db_manager);
+        let scheduler = TaskScheduler::new(db_manager, "live_record".into());
         let webcast_consumer = WebcastConsumer {
             running_tasks: Default::default(),
         };
