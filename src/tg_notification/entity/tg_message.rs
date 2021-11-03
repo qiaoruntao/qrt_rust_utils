@@ -16,9 +16,9 @@ pub enum TgMsgFormat {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct TgMessage {
-    text: String,
-    format: TgMsgFormat,
-    show_notification: bool,
+    pub text: String,
+    pub format: TgMsgFormat,
+    pub show_notification: bool,
 }
 
 impl TgMessage {
