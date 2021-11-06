@@ -7,7 +7,7 @@ use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
 use crate::task::task::Task;
@@ -19,9 +19,8 @@ pub enum TaskConsumerResult {
 }
 
 pub trait TaskParamType:
-    Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq
-{
-}
+Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq
+{}
 
 pub trait TaskStateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send {}
 
@@ -77,6 +76,7 @@ pub trait TaskConsumer<
         arc_scheduler: Arc<RwLock<TaskScheduler>>,
         arc_consumer: Arc<RwLock<T>>,
     ) {
+        info!("start to run main loop");
         loop {
             let arc1 = arc_consumer.clone();
             let consumer = arc1.try_read().unwrap();
@@ -96,7 +96,7 @@ pub trait TaskConsumer<
                 Err(e) => {
                     match e {
                         TaskSchedulerError::NoPendingTask => {
-                            info!("no pending task found");
+                            trace!("no pending task found");
                             // wait a while
                             tokio::time::sleep(Duration::from_secs(1)).await;
                             continue;
@@ -123,6 +123,8 @@ pub trait TaskConsumer<
                         error!("unknown error while occupying task {:?}", e);
                     }
                 }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
             }
             drop(task_scheduler_guard);
             // send to background

@@ -8,7 +8,7 @@ use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::db_task::task_consumer::{TaskConsumer, TaskConsumerResult};
 use crate::db_task::task_scheduler::TaskScheduler;
@@ -78,7 +78,13 @@ impl<
 
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>) {
         let guard = self.running_tasks.lock().await;
-        info!("maintainer runs, task count= {}", guard.len());
+        let total_cnt = guard.len();
+        if total_cnt == 0 {
+            trace!("no task to maintain");
+        } else {
+            info!("maintainer runs, task count= {}", guard.len());
+        }
+
         let scheduler_guard = task_scheduler.try_read().unwrap();
         for running_task in guard.iter() {
             let update_result = scheduler_guard.update_task(running_task.clone()).await;

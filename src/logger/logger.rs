@@ -1,6 +1,7 @@
 use derive_builder::Builder;
 use serde::Deserialize;
 use serde::Serialize;
+use tracing_subscriber::filter::EnvFilter;
 use tracing_subscriber::fmt;
 use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::layer::SubscriberExt;
@@ -27,9 +28,14 @@ impl Default for LoggerConfig {
 
 impl Logger {
     pub fn init_logger(logger_config: &LoggerConfig) {
-        let fmt_layer = fmt::Layer::default().with_timer(LocalTime::rfc_3339());
+        let filter_layer = EnvFilter::try_from_default_env()
+            .or_else(|_| EnvFilter::try_new("info"))
+            .unwrap();
+        let fmt_layer = fmt::Layer::default()
+            .with_timer(LocalTime::rfc_3339());
         let subscriber = Registry::default()
             // .with(JsonStorageLayer)
+            .with(filter_layer)
             .with(fmt_layer);
         if logger_config.with_fluentd {
             let config: FluentdLayerConfig =

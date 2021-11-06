@@ -15,7 +15,7 @@ mongodb = { version = "2.0.1", default-features = false, features = ["async-std-
 reqwest = { version = "0.11.6", features = ['socks'] }
 tracing = { version = "0.1.29", features = ["log"] }
 #tracing-futures = { version = "0.2.5", default-features = false }
-tracing-subscriber = { version = "0.3.1", features = ["local-time"] }
+tracing-subscriber = { version = "0.3.1", features = ["local-time", "env-filter", "std"] }
 tracing-log = "0.1.2"
 fruently = { version = "0.10.0", features = [] }
 lazy_static = "1.4.0"
