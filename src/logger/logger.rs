@@ -2,7 +2,7 @@ use derive_builder::Builder;
 use serde::Deserialize;
 use serde::Serialize;
 use tracing_subscriber::fmt;
-use tracing_subscriber::fmt::time::ChronoLocal;
+use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
@@ -27,7 +27,7 @@ impl Default for LoggerConfig {
 
 impl Logger {
     pub fn init_logger(logger_config: &LoggerConfig) {
-        let fmt_layer = fmt::Layer::default().with_timer(ChronoLocal::rfc3339());
+        let fmt_layer = fmt::Layer::default().with_timer(LocalTime::rfc_3339());
         let subscriber = Registry::default()
             // .with(JsonStorageLayer)
             .with(fmt_layer);

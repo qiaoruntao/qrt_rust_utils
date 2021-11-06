@@ -1,20 +1,17 @@
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
-use std::future::Future;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use mongodb::bson::Document;
-use reqwest::header::Keys;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{error, info};
+use tracing::info;
 
-use crate::db_task::task_consumer::{TaskConsumer, TaskConsumerResult, TaskParamType, TaskStateType};
-use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
+use crate::db_task::task_consumer::{TaskConsumer, TaskConsumerResult};
+use crate::db_task::task_scheduler::TaskScheduler;
 use crate::task::task::Task;
 
 #[async_trait]
@@ -32,7 +29,8 @@ impl<
     ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     M: Runner<ParamType, StateType>,
-> BasicConsumer<ParamType, StateType, M> {
+> BasicConsumer<ParamType, StateType, M>
+{
     pub fn new(runner: M) -> Self {
         BasicConsumer {
             running_tasks: Default::default(),
@@ -45,8 +43,9 @@ impl<
 impl<
     ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
-    RunnerType: Runner<ParamType, StateType> + Sync + Send
-> TaskConsumer<ParamType, StateType> for BasicConsumer<ParamType, StateType, RunnerType> {
+    RunnerType: Runner<ParamType, StateType> + Sync + Send,
+> TaskConsumer<ParamType, StateType> for BasicConsumer<ParamType, StateType, RunnerType>
+{
     fn build_filter(&self) -> Option<Document> {
         None
     }
@@ -63,7 +62,10 @@ impl<
         true
     }
 
-    async fn remove_running_task(&self, task2remove: Arc<RwLock<Task<ParamType, StateType>>>) -> bool {
+    async fn remove_running_task(
+        &self,
+        task2remove: Arc<RwLock<Task<ParamType, StateType>>>,
+    ) -> bool {
         let mut guard = self.running_tasks.lock().await;
         for (index, task) in guard.iter().enumerate() {
             if task.try_read().unwrap().deref() == task2remove.try_read().unwrap().deref() {

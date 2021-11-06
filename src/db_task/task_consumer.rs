@@ -18,7 +18,10 @@ pub enum TaskConsumerResult {
     Failed,
 }
 
-pub trait TaskParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq {}
+pub trait TaskParamType:
+    Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq
+{
+}
 
 pub trait TaskStateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send {}
 
@@ -70,7 +73,10 @@ pub trait TaskConsumer<
             }
         }
     }
-    async fn main_loop<T: 'static + TaskConsumer<ParamType, StateType> + Sync + Send>(arc_scheduler: Arc<RwLock<TaskScheduler>>, arc_consumer: Arc<RwLock<T>>) {
+    async fn main_loop<T: 'static + TaskConsumer<ParamType, StateType> + Sync + Send>(
+        arc_scheduler: Arc<RwLock<TaskScheduler>>,
+        arc_consumer: Arc<RwLock<T>>,
+    ) {
         loop {
             let arc1 = arc_consumer.clone();
             let consumer = arc1.try_read().unwrap();

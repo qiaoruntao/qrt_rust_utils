@@ -35,7 +35,7 @@ impl NotificationManager {
             match guard.send_task(Arc::new(RwLock::new(task))).await {
                 Ok(_) => {}
                 Err(e) => {
-                    error!("{:?}",&e);
+                    error!("{:?}", &e);
                 }
             }
         });

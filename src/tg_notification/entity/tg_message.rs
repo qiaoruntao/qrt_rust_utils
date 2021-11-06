@@ -5,9 +5,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
 
-use crate::db_task::task_consumer::TaskParamType;
-use crate::db_task::task_consumer::TaskStateType;
-
 #[derive(Deserialize_enum_str, Serialize_enum_str, Clone, Debug, PartialOrd, PartialEq)]
 pub enum TgMsgFormat {
     MarkdownV2,
