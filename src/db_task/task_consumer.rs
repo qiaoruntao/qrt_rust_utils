@@ -1,12 +1,13 @@
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::RwLock;
-use tracing::error;
+use tracing::{error, info};
 
 use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
 use crate::task::task::Task;
@@ -17,10 +18,14 @@ pub enum TaskConsumerResult {
     Failed,
 }
 
+pub trait TaskParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq {}
+
+pub trait TaskStateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send {}
+
 #[async_trait]
 pub trait TaskConsumer<
-    ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
-    StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+    ParamType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+    StateType: 'static + Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
 >
 {
     fn build_filter(&self) -> Option<Document>;
@@ -63,6 +68,70 @@ pub trait TaskConsumer<
                 // TODO: do nothing, wait for timeout retry
                 Err(TaskSchedulerError::TaskFailedError)
             }
+        }
+    }
+    async fn main_loop<T: 'static + TaskConsumer<ParamType, StateType> + Sync + Send>(arc_scheduler: Arc<RwLock<TaskScheduler>>, arc_consumer: Arc<RwLock<T>>) {
+        loop {
+            let arc1 = arc_consumer.clone();
+            let consumer = arc1.try_read().unwrap();
+            let filter = consumer.build_filter();
+            // maintain
+            let arc2 = arc_scheduler.clone();
+            consumer.run_maintainer(arc2.clone()).await;
+            drop(consumer);
+            // find a task
+            let task_scheduler_guard = arc2.try_read().unwrap();
+            // TODO: merge find and occupy for relentless check
+            let result = task_scheduler_guard
+                .find_next_pending_task(filter.clone())
+                .await;
+            let task = match result {
+                Ok(task) => task,
+                Err(e) => {
+                    match e {
+                        TaskSchedulerError::NoPendingTask => {
+                            info!("no pending task found");
+                            // wait a while
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                            continue;
+                            // break;
+                        }
+                        _ => {
+                            // unexpected error
+                            error!("{:?}", e);
+                            // break;
+                            break;
+                        }
+                    }
+                }
+            };
+            info!("new task found");
+            // occupy the task
+            if let Err(e) = task_scheduler_guard.occupy_pending_task(task.clone()).await {
+                match e {
+                    TaskSchedulerError::OccupyTaskFailed | TaskSchedulerError::NoMatchedTask => {
+                        // this is ok
+                        info!("occupy task failed, {:?}", e);
+                    }
+                    _ => {
+                        error!("unknown error while occupying task {:?}", e);
+                    }
+                }
+            }
+            drop(task_scheduler_guard);
+            // send to background
+            tokio::spawn(async move {
+                let arc = arc1;
+                let consumer = arc.try_read().unwrap();
+                match consumer.run_task_core(arc2, task).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        println!("running task failed, {:?}", &e);
+                    }
+                }
+            });
+            // TODO: test
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }

@@ -14,6 +14,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 
+use crate::db_task::task_consumer::{TaskParamType, TaskStateType};
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskState};
 
@@ -59,8 +60,8 @@ impl TaskScheduler {
         task: Arc<RwLock<Task<ParamType, StateType>>>,
     ) -> Result<ObjectId, TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let options = mongodb::options::InsertOneOptions::default();
         let collection = self
@@ -92,8 +93,8 @@ impl TaskScheduler {
         task: Arc<RwLock<Task<ParamType, StateType>>>,
     ) -> Result<Task<ParamType, StateType>, TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let options = mongodb::options::FindOneOptions::default();
         let collection = self
@@ -119,8 +120,8 @@ impl TaskScheduler {
         custom_filter: Option<Document>,
     ) -> Result<Arc<RwLock<Task<ParamType, StateType>>>, TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let result = self
             .find_pending_task::<ParamType, StateType>(custom_filter)
@@ -143,8 +144,8 @@ impl TaskScheduler {
         custom_filter: Option<Document>,
     ) -> Result<Vec<Task<ParamType, StateType>>, TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let result = self
             .find_pending_task::<ParamType, StateType>(custom_filter)
@@ -169,8 +170,8 @@ impl TaskScheduler {
         custom_filter: Option<Document>,
     ) -> Result<Cursor<Task<ParamType, StateType>>, TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + Send + Sync,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let options = mongodb::options::FindOptions::default();
         let collection = self
@@ -220,8 +221,8 @@ impl TaskScheduler {
         task: Arc<RwLock<Task<ParamType, StateType>>>,
     ) -> Result<(), TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let collection = self
             .db_manager
@@ -266,8 +267,8 @@ impl TaskScheduler {
         task: Arc<RwLock<Task<ParamType, StateType>>>,
     ) -> Result<(), TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let collection = self
             .db_manager
@@ -320,13 +321,10 @@ impl TaskScheduler {
     }
 
     // mark task as completed
-    pub async fn complete_task<ParamType, StateType>(
-        &self,
-        task: Arc<RwLock<Task<ParamType, StateType>>>,
-    ) -> Result<(), TaskSchedulerError>
+    pub async fn complete_task<ParamType, StateType>(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> Result<(), TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let collection = self
             .db_manager
@@ -367,8 +365,8 @@ impl TaskScheduler {
         task: Arc<RwLock<Task<ParamType, StateType>>>,
     ) -> Result<(), TaskSchedulerError>
         where
-            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
-            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send,
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
     {
         let collection = self
             .db_manager
@@ -466,7 +464,7 @@ mod test_task_scheduler {
         let scheduler = TaskScheduler::new(db_manager, COLLECTION_NAME.clone());
         tokio::spawn(async move {
             let result1 = scheduler.find_pending_task::<i32, i32>(None).await.unwrap();
-            dbg!(&result1);
+            println!("{:?}", &result1);
         });
     }
 
