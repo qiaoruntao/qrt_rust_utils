@@ -40,3 +40,7 @@ exclude = []
 
 [features]
 derive = ["qrt_rust_macros"]
+
+[[bin]]
+name = "test_ffmpeg_caller"
+path = "./examples/test_ffmpeg_caller.rs"
