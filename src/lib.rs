@@ -20,3 +20,4 @@ pub mod set_interval;
 pub mod task;
 pub mod tg_notification;
 pub mod youtubedl_utils;
+pub mod ffmpeg_caller;
