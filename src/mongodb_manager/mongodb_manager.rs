@@ -73,7 +73,7 @@ impl MongoDbManager {
         self.db.collection::<K>(collection_name)
     }
 
-    pub async fn save2collection<T>(&self, obj: T, collection_name: &str) -> Result<InsertOneResult, Box<dyn std::error::Error>>
+    pub async fn save2collection<T>(&self, obj: &T, collection_name: &str) -> Result<InsertOneResult, Box<dyn std::error::Error>>
         where T: Serialize {
         // info!("try inserting data");
         let collection: Collection<Document> = self.get_collection(collection_name);
@@ -85,7 +85,7 @@ impl MongoDbManager {
             temp.write_concern = Option::from(temp_write_concern);
             temp
         };
-        let result = mongodb::bson::to_bson(&obj)?;
+        let result = mongodb::bson::to_bson(obj)?;
         let now = chrono::Local::now();
         let document = doc! {"time":now, "data":&result};
         match collection.insert_one(&document, Some(insert_one_options)).await {
@@ -121,7 +121,7 @@ mod mongodb_manager_test {
         let config: MongoDbConfig =
             ConfigManager::read_config_with_directory("config/mongo")?;
         let manager = MongoDbManager::new(config, "Logger")?;
-        match manager.save2collection(1, "test_save").await {
+        match manager.save2collection(&1, "test_save").await {
             Ok(val) => {
                 dbg!(val);
                 Ok(())
