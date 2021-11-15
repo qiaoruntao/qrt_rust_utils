@@ -4,16 +4,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use futures::future::err;
 use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tokio::sync::{RwLock, Semaphore, SemaphorePermit, TryAcquireError};
+use tokio::sync::{RwLock, Semaphore};
 use tracing::{error, info, trace};
 
 use crate::db_task::consumer_config::ConsumerConfig;
 use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
-use crate::db_task::task_scheduler::TaskSchedulerError::TaskFailedError;
 use crate::task::task::Task;
 
 pub enum TaskConsumerResult {

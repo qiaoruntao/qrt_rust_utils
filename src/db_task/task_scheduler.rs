@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::{DateTime, Local};
+use chrono::{Local};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::Bson::Null;
@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
-use tracing_subscriber::fmt::time::LocalTime;
+
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskState};
