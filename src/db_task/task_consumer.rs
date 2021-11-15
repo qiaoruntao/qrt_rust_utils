@@ -3,12 +3,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use futures::future::err;
 use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, Semaphore, SemaphorePermit, TryAcquireError};
 use tracing::{error, info, trace};
 
+use crate::db_task::consumer_config::ConsumerConfig;
 use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
 use crate::task::task::Task;
 
@@ -75,9 +77,12 @@ pub trait TaskConsumer<
     async fn main_loop<T: 'static + TaskConsumer<ParamType, StateType> + Sync + Send>(
         arc_scheduler: Arc<RwLock<TaskScheduler>>,
         arc_consumer: Arc<RwLock<T>>,
+        consumer_config: ConsumerConfig,
     ) {
         info!("start to run main loop");
+        let semaphore = Arc::new(Semaphore::new(consumer_config.max_concurrency as usize));
         loop {
+            // try get token now
             let arc1 = arc_consumer.clone();
             let consumer = arc1.try_read().unwrap();
             let filter = consumer.build_filter();
@@ -85,6 +90,13 @@ pub trait TaskConsumer<
             let arc2 = arc_scheduler.clone();
             consumer.run_maintainer(arc2.clone()).await;
             drop(consumer);
+            let token = match semaphore.clone().try_acquire_owned() {
+                Ok(token) => { token }
+                Err(_) => {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
             // find a task
             let task_scheduler_guard = arc2.try_read().unwrap();
             // TODO: merge find and occupy for relentless check
@@ -137,6 +149,7 @@ pub trait TaskConsumer<
                         println!("running task failed, {:?}", &e);
                     }
                 }
+                drop(token);
             });
             // TODO: test
             tokio::time::sleep(Duration::from_secs(1)).await;

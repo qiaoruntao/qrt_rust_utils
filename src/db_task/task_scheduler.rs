@@ -44,7 +44,7 @@ pub enum TaskSchedulerError {
 }
 lazy_static! {
     // TODO: optimize
-    static ref global_worker_id:i64=Local::now().timestamp();
+    static ref GLOBAL_WORKER_ID:i64=Local::now().timestamp();
 }
 pub struct TaskScheduler {
     db_manager: Mutex<MongoDbManager>,
@@ -242,7 +242,7 @@ impl TaskScheduler {
                 {"key":&task.key}
             ]
         };
-        let new_state = TaskState::init(&Local::now(), global_worker_id.clone(), &task.option);
+        let new_state = TaskState::init(&Local::now(), GLOBAL_WORKER_ID.clone(), &task.option);
         let update = doc! {
             "$set":{
                 "task_state":mongodb::bson::to_document( &new_state).unwrap()
@@ -317,7 +317,7 @@ impl TaskScheduler {
     ) -> Document {
         doc! {
             "task_state.complete_time": mongodb::bson::Bson::Null,
-            "task_state.current_worker_id": &global_worker_id.clone(),
+            "task_state.current_worker_id": &GLOBAL_WORKER_ID.clone(),
             "task_state.next_ping_time": { "$gte": mongodb::bson::DateTime::now() },
             "task_state.ping_time": { "$lte": mongodb::bson::DateTime::now() },
             "key":&task.key
