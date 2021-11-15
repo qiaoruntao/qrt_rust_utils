@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -12,12 +13,14 @@ use tracing::{error, info, trace};
 
 use crate::db_task::consumer_config::ConsumerConfig;
 use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
+use crate::db_task::task_scheduler::TaskSchedulerError::TaskFailedError;
 use crate::task::task::Task;
 
 pub enum TaskConsumerResult {
     Completed,
     Cancelled,
     Failed,
+    RequestStop,
 }
 
 pub trait TaskParamType:
@@ -72,6 +75,9 @@ pub trait TaskConsumer<
                 // TODO: do nothing, wait for timeout retry
                 Err(TaskSchedulerError::TaskFailedError)
             }
+            TaskConsumerResult::RequestStop => {
+                Err(TaskSchedulerError::RunnerPanic)
+            }
         }
     }
     async fn main_loop<T: 'static + TaskConsumer<ParamType, StateType> + Sync + Send>(
@@ -81,7 +87,10 @@ pub trait TaskConsumer<
     ) {
         info!("start to run main loop");
         let semaphore = Arc::new(Semaphore::new(consumer_config.max_concurrency as usize));
-        loop {
+        let duration = consumer_config.task_delay;
+        let running_state = Arc::new(AtomicBool::new(true));
+        while running_state.load(Ordering::Relaxed) {
+            tokio::time::sleep(Duration::from_secs(1)).await;
             // try get token now
             let arc1 = arc_consumer.clone();
             let consumer = arc1.try_read().unwrap();
@@ -93,7 +102,6 @@ pub trait TaskConsumer<
             let token = match semaphore.clone().try_acquire_owned() {
                 Ok(token) => { token }
                 Err(_) => {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             };
@@ -109,15 +117,11 @@ pub trait TaskConsumer<
                     match e {
                         TaskSchedulerError::NoPendingTask => {
                             trace!("no pending task found");
-                            // wait a while
-                            tokio::time::sleep(Duration::from_secs(1)).await;
                             continue;
-                            // break;
                         }
                         _ => {
                             // unexpected error
                             error!("{:?}", e);
-                            // break;
                             break;
                         }
                     }
@@ -135,24 +139,30 @@ pub trait TaskConsumer<
                         error!("unknown error while occupying task {:?}", e);
                     }
                 }
-                tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
             drop(task_scheduler_guard);
+            let state = running_state.clone();
             // send to background
             tokio::spawn(async move {
                 let arc = arc1;
                 let consumer = arc.try_read().unwrap();
                 match consumer.run_task_core(arc2, task).await {
                     Ok(_) => {}
+                    Err(TaskSchedulerError::RunnerPanic) => {
+                        error!("runner panic, stop executing now");
+                        state.store(false, Ordering::Relaxed);
+                    }
                     Err(e) => {
                         println!("running task failed, {:?}", &e);
                     }
                 }
+                if !duration.is_zero() {
+                    trace!("sleep {:?} after task finished", duration);
+                    tokio::time::sleep(duration).await;
+                }
                 drop(token);
             });
-            // TODO: test
-            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 }

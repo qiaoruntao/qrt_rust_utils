@@ -102,6 +102,7 @@ impl MongoDbManager {
 #[cfg(test)]
 mod mongodb_manager_test {
     use std::error::Error;
+    use tracing::trace;
 
     use crate::config_manage::config_manager::ConfigManager;
     use crate::mongodb_manager::entity::mongodb_config::MongoDbConfig;
@@ -127,7 +128,7 @@ mod mongodb_manager_test {
                 Ok(())
             }
             Err(e) => {
-                dbg!(&e);
+                trace!("&e={:?}",&e);
                 Err(e)
             }
         }

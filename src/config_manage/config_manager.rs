@@ -27,13 +27,15 @@ impl ConfigManager {
 
 #[cfg(test)]
 mod test_config_manager {
+    use tracing::trace;
+
     use crate::config_manage::config_manager::ConfigManager;
     use crate::config_manage::entity::config_entity::TestConfigEntity;
 
     #[test]
     fn basic() {
         let config: TestConfigEntity = ConfigManager::read_config().unwrap();
-        dbg!(&config);
+        trace!("&config={:?}",&config);
         assert_eq!(config.a, "aaa");
         assert_eq!(config.b.c, 1);
     }

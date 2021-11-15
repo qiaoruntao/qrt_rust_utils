@@ -143,7 +143,7 @@ impl FluentdLayer {
         let fluentd_instance =
             Fluent::new_with_conf(config.server_url.clone(), config.tag.clone(), retry_conf);
         let _result = fluentd_instance.post(fluentd_log);
-        // dbg!(&_result);
+        // trace!("&_result={:?}",&_result);
         // assert!(result.is_ok())
     }
     pub fn generate(config: &FluentdLayerConfig) -> FluentdLayer {
