@@ -6,7 +6,7 @@ use async_recursion::async_recursion;
 use regex::Regex;
 use tokio::io::{BufReader, Lines};
 use tokio::process::{ChildStdout, Command};
-use tracing::error;
+use tracing::{error, trace};
 
 use crate::ffmpeg_caller::ffmpeg_progress::{Progress, Status};
 
@@ -17,7 +17,7 @@ async fn check_progress(mut reader: Lines<BufReader<ChildStdout>>) -> Result<(),
     let result = &reader.next_line().await.unwrap();
     if let Some(str) = result {
         let progress = parse_line(str);
-        dbg!(&progress);
+        trace!("&progress={:?}",&progress);
         tokio::spawn(check_progress(reader)).await.unwrap()
     } else {
         Ok(())
@@ -106,12 +106,13 @@ impl FFmpegCaller {
         // };
         // let reader = BufReader::new(output).lines();
         let result = child.wait().await;
-        dbg!(&result);
+        trace!("&result={:?}",&result);
     }
 }
 
 #[cfg(test)]
 mod test_ffmpeg_caller {
+    use tracing::trace;
     use crate::ffmpeg_caller::ffmpeg_caller::{FFmpegCaller, parse_line};
 
     #[tokio::test]
@@ -126,6 +127,6 @@ mod test_ffmpeg_caller {
     fn test_parse_line() {
         let line = "frame=  196 fps= 19 q=-1.0 Lsize=    5081kB time=00:00:14.06 bitrate=2958.7kbits/s dup=2 drop=0 speed=1.36x";
         let progress = parse_line(line);
-        dbg!(&progress);
+        trace!("&progress={:?}",&progress);
     }
 }

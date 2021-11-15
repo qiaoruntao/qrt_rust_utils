@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::{DateTime, Local};
+use chrono::{Local};
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::Bson::Null;
@@ -14,7 +14,8 @@ use mongodb::error::{ErrorKind, WriteFailure};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
-use tracing_subscriber::fmt::time::LocalTime;
+use tracing::trace;
+
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskState};
@@ -33,6 +34,8 @@ pub enum TaskSchedulerError {
     TaskFailedError,
     #[error("cannot occupy task")]
     OccupyTaskFailed,
+    #[error("runner wait to exit")]
+    RunnerPanic,
     #[error("cannot complete task")]
     CompleteTaskFailed,
     #[error("cannot complete task")]
@@ -44,7 +47,7 @@ pub enum TaskSchedulerError {
 }
 lazy_static! {
     // TODO: optimize
-    static ref global_worker_id:i64=Local::now().timestamp();
+    static ref GLOBAL_WORKER_ID:i64=Local::now().timestamp();
 }
 pub struct TaskScheduler {
     db_manager: Mutex<MongoDbManager>,
@@ -185,9 +188,9 @@ impl TaskScheduler {
             .get_collection::<Task<ParamType, StateType>>(self.task_collection_name.as_str());
 
         let filter = TaskScheduler::generate_pending_task_condition(custom_filter);
-        // dbg!(&filter);
+        // trace!("&filter={:?}",&filter);
         let cursor = collection.find(filter, Some(options)).await?;
-        // dbg!(&result);
+        // trace!("&result={:?}",&result);
         // println!("ok");
         Ok(cursor)
     }
@@ -242,20 +245,20 @@ impl TaskScheduler {
                 {"key":&task.key}
             ]
         };
-        let new_state = TaskState::init(&Local::now(), global_worker_id.clone(), &task.option);
+        let new_state = TaskState::init(&Local::now(), GLOBAL_WORKER_ID.clone(), &task.option);
         let update = doc! {
             "$set":{
                 "task_state":mongodb::bson::to_document( &new_state).unwrap()
             }
         };
 
-        // dbg!(&filter);
-        // dbg!(&update);
+        // trace!("&filter={:?}",&filter);
+        // trace!("&update={:?}",&update);
         let mut options = mongodb::options::UpdateOptions::default();
         options.upsert = Some(false);
 
         let result = collection.update_one(filter, update, Some(options)).await?;
-        dbg!(&result);
+        trace!("{:?}",&result);
         if result.matched_count == 0 {
             Err(TaskSchedulerError::NoMatchedTask)
         } else if result.modified_count == 0 {
@@ -317,7 +320,7 @@ impl TaskScheduler {
     ) -> Document {
         doc! {
             "task_state.complete_time": mongodb::bson::Bson::Null,
-            "task_state.current_worker_id": &global_worker_id.clone(),
+            "task_state.current_worker_id": &GLOBAL_WORKER_ID.clone(),
             "task_state.next_ping_time": { "$gte": mongodb::bson::DateTime::now() },
             "task_state.ping_time": { "$lte": mongodb::bson::DateTime::now() },
             "key":&task.key
@@ -350,13 +353,13 @@ impl TaskScheduler {
             }
         };
 
-        dbg!(&filter);
-        dbg!(&update);
+        trace!("filter={:?}",&filter);
+        trace!("update={:?}",&update);
         let mut options = mongodb::options::UpdateOptions::default();
         options.upsert = Some(false);
 
         let result = collection.update_one(filter, update, Some(options)).await?;
-        dbg!(&result);
+        trace!("result={:?}",&result);
         if result.matched_count == 0 {
             Err(TaskSchedulerError::NoMatchedTask)
         } else if result.modified_count == 0 {
@@ -397,13 +400,13 @@ impl TaskScheduler {
             }
         };
 
-        dbg!(&filter);
-        dbg!(&update);
+        trace!("&filter={:?}",&filter);
+        trace!("&update={:?}",&update);
         let mut options = mongodb::options::UpdateOptions::default();
         options.upsert = Some(false);
 
         let result = collection.update_one(filter, update, Some(options)).await?;
-        dbg!(&result);
+        trace!("&result={:?}",&result);
         if result.matched_count == 0 {
             Err(TaskSchedulerError::NoMatchedTask)
         } else if result.modified_count == 0 && result.upserted_id == None {
@@ -422,7 +425,7 @@ mod test_task_scheduler {
     use futures::TryStreamExt;
     use lazy_static::lazy_static;
     use tokio::sync::RwLock;
-    use tracing::error;
+    use tracing::{error, trace};
 
     use crate::config_manage::config_manager::ConfigManager;
     use crate::db_task::task_scheduler::TaskScheduler;
@@ -461,7 +464,7 @@ mod test_task_scheduler {
             state: 1,
         };
         let send_result = scheduler.send_task(Arc::new(RwLock::new(task))).await;
-        dbg!(&send_result);
+        trace!("&send_result={:?}",&send_result);
     }
 
     #[tokio::test]
@@ -492,7 +495,7 @@ mod test_task_scheduler {
         let arc = Arc::new(RwLock::new(task));
         let result1 = tokio::spawn(async move {
             let occupy_result = scheduler.occupy_pending_task(arc.clone()).await;
-            dbg!(&occupy_result);
+            trace!("&occupy_result={:?}",&occupy_result);
             let task = match scheduler.fetch_task(arc).await {
                 Err(e) => {
                     error!("{:?}", e);
@@ -501,10 +504,10 @@ mod test_task_scheduler {
                 Ok(task) => task,
             };
             let complete_result = scheduler.complete_task(Arc::new(RwLock::new(task))).await;
-            dbg!(&complete_result);
+            trace!("&complete_result={:?}",&complete_result);
         })
             .await;
-        dbg!(&result1);
+        trace!("&result1={:?}",&result1);
     }
 
     #[tokio::test]
@@ -523,8 +526,8 @@ mod test_task_scheduler {
         };
         let arc = Arc::new(RwLock::new(task));
         let occupy_result = scheduler.occupy_pending_task(arc.clone()).await;
-        dbg!(&occupy_result);
+        trace!("&occupy_result={:?}",&occupy_result);
         let complete_result = scheduler.cancel_task(arc).await;
-        dbg!(&complete_result);
+        trace!("&complete_result={:?}",&complete_result);
     }
 }

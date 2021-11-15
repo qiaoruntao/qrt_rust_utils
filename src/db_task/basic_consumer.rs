@@ -51,7 +51,7 @@ impl<
     }
 
     async fn consume(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> TaskConsumerResult {
-        info!("task {} consumed", &task.try_read().unwrap().key);
+        info!("task {} start to run", &task.try_read().unwrap().key);
         let runner = &self.runner;
         runner.func(task).await
     }

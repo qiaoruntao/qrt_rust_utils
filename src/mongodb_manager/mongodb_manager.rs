@@ -1,20 +1,20 @@
-use std::collections::HashMap;
+
 use std::fmt::Debug;
-use std::sync::Arc;
+
 use std::time::Duration;
 
 use mongodb::{Client, options::ClientOptions};
 use mongodb::{Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::options::{Credential, InsertOneOptions, Tls, TlsOptions, WriteConcern};
-use mongodb::options::ReadConcernLevel::Local;
+
 use mongodb::options::ServerAddress::Tcp;
 use mongodb::results::InsertOneResult;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::{Error, Value};
-use tokio::sync::RwLock;
-use tracing::info;
+
+
+
 
 use crate::mongodb_manager::entity::mongodb_config::MongoDbConfig;
 
@@ -102,6 +102,7 @@ impl MongoDbManager {
 #[cfg(test)]
 mod mongodb_manager_test {
     use std::error::Error;
+    use tracing::trace;
 
     use crate::config_manage::config_manager::ConfigManager;
     use crate::mongodb_manager::entity::mongodb_config::MongoDbConfig;
@@ -127,7 +128,7 @@ mod mongodb_manager_test {
                 Ok(())
             }
             Err(e) => {
-                dbg!(&e);
+                trace!("&e={:?}",&e);
                 Err(e)
             }
         }

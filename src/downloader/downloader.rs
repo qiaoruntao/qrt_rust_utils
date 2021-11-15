@@ -7,9 +7,10 @@ use crate::downloader::download_config::DownloadConfig;
 use crate::downloader::download_info::DownloadInfo;
 
 pub struct Downloader {}
+
 // this module is under development
 impl Downloader {
-    async fn download_file(
+    pub async fn download_file(
         url: &str,
         filepath: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -20,7 +21,7 @@ impl Downloader {
         Ok(()) as Result<(), Box<dyn std::error::Error + Send + Sync>>
     }
 
-    pub async fn download(download_info: &DownloadInfo, download_config: &DownloadConfig) {
+    pub async fn download(download_info: &DownloadInfo, download_config: &DownloadConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let url = download_info.download_url.clone();
         let download_directory = {
             let mut path = Path::new(&download_config.download_directory).to_path_buf();
@@ -48,6 +49,5 @@ impl Downloader {
         };
         Downloader::download_file(url.as_str(), download_path_str)
             .await
-            .unwrap();
     }
 }
