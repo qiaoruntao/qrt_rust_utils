@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::{Local};
+use chrono::Local;
 use futures::TryStreamExt;
 use lazy_static::lazy_static;
 use mongodb::bson::Bson::Null;
@@ -15,7 +15,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
-
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
 use crate::task::task::{Task, TaskState};
@@ -430,7 +429,7 @@ mod test_task_scheduler {
     use crate::config_manage::config_manager::ConfigManager;
     use crate::db_task::task_scheduler::TaskScheduler;
     use crate::mongodb_manager::mongodb_manager::MongoDbManager;
-    use crate::task::task::{Task, TaskMeta, TaskOptions, TaskState};
+    use crate::task::task::{DefaultTaskState, Task, TaskMeta, TaskOptions, TaskState};
 
     lazy_static! {
         static ref COLLECTION_NAME: String = "live_record".into();
@@ -461,7 +460,7 @@ mod test_task_scheduler {
                 progress: None,
             },
             param: 1,
-            state: 1,
+            state: DefaultTaskState::default(),
         };
         let send_result = scheduler.send_task(Arc::new(RwLock::new(task))).await;
         trace!("&send_result={:?}",&send_result);

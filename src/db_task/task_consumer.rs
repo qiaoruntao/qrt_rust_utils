@@ -88,7 +88,6 @@ pub trait TaskConsumer<
         let duration = consumer_config.task_delay;
         let running_state = Arc::new(AtomicBool::new(true));
         while running_state.load(Ordering::Relaxed) {
-            tokio::time::sleep(Duration::from_secs(1)).await;
             // try get token now
             let arc1 = arc_consumer.clone();
             let consumer = arc1.try_read().unwrap();
@@ -100,6 +99,8 @@ pub trait TaskConsumer<
             let token = match semaphore.clone().try_acquire_owned() {
                 Ok(token) => { token }
                 Err(_) => {
+                    trace!("cannot acquire a token");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             };
@@ -115,6 +116,8 @@ pub trait TaskConsumer<
                     match e {
                         TaskSchedulerError::NoPendingTask => {
                             trace!("no pending task found");
+                            // we have to wait for a while and then check
+                            tokio::time::sleep(Duration::from_secs(1)).await;
                             continue;
                         }
                         _ => {
@@ -130,11 +133,13 @@ pub trait TaskConsumer<
             if let Err(e) = task_scheduler_guard.occupy_pending_task(task.clone()).await {
                 match e {
                     TaskSchedulerError::OccupyTaskFailed | TaskSchedulerError::NoMatchedTask => {
-                        // this is ok
+                        // this is ok, there may still tasks pending, check again now
                         info!("occupy task failed, {:?}", e);
                     }
                     _ => {
+                        // wait for a while in case something bad happens
                         error!("unknown error while occupying task {:?}", e);
+                        tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 }
                 continue;

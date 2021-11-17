@@ -5,7 +5,7 @@ use tracing::error;
 
 use crate::db_task::task_scheduler::TaskScheduler;
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
-use crate::task::task::{Task, TaskMeta, TaskState};
+use crate::task::task::{DefaultTaskState, Task, TaskMeta, TaskState};
 use crate::tg_notification::entity::tg_message::TgMessage;
 
 pub struct NotificationManager {
@@ -26,7 +26,7 @@ impl NotificationManager {
             option: Default::default(),
             task_state: TaskState::default(),
             param: msg,
-            state: (),
+            state: DefaultTaskState::default(),
         };
         let arc = self.task_scheduler.clone();
         // async send, do not block
