@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use chrono::Local;
-use tracing::error;
+use tracing::{error, info};
+use url::Url;
 
 use crate::downloader::download_config::DownloadConfig;
-use crate::downloader::download_info::DownloadInfo;
+use crate::sanitizer::sanitize::sanitize;
+use crate::task::simple_download_task::SimpleDownloadTaskParam;
 
 pub struct Downloader {}
 
@@ -21,16 +22,28 @@ impl Downloader {
         Ok(()) as Result<(), Box<dyn std::error::Error + Send + Sync>>
     }
 
-    pub async fn download(download_info: &DownloadInfo, download_config: &DownloadConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn download(download_info: &SimpleDownloadTaskParam, download_config: &DownloadConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let url = download_info.download_url.clone();
         let download_directory = {
             let mut path = Path::new(&download_config.download_directory).to_path_buf();
             for directory in download_info.parent_directories.iter() {
-                path = path.join(directory);
+                path = path.join(sanitize(directory));
             }
             path
         };
-        // let filename = Path::new(&url).file_name().unwrap().to_str().unwrap();
+        let parsed_url = Url::parse(url.as_str()).unwrap();
+        let all_split = parsed_url.path_segments().unwrap();
+        let last_part = all_split.last().unwrap();
+        // let filename = match last_part.split('.').last() {
+        //     None => {
+        //         info!("extension info not found, url={}", url);
+        //         // no extension info, use name only
+        //         download_info.name.clone()
+        //     }
+        //     Some(ext) => {
+        //         format!("{}.{}", download_info.name.as_str(), ext)
+        //     }
+        // };
 
         let download_path = download_directory.join(&download_info.name);
         let download_path_str = download_path.as_os_str().to_str().unwrap();
@@ -38,15 +51,9 @@ impl Downloader {
             Ok(_) => {}
             Err(err) => {
                 error!("{:?}", &err);
+                return Err(err.into());
             }
         }
-        let _updated_download_info = {
-            let mut temp = download_info.clone();
-            temp.start_time = Some(Local::now());
-            temp.file_path = Some(download_path_str.into());
-            temp.complete_time = Some(Local::now());
-            temp
-        };
         Downloader::download_file(url.as_str(), download_path_str)
             .await
     }

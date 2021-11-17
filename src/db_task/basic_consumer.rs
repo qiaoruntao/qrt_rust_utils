@@ -17,6 +17,9 @@ use crate::task::task::Task;
 #[async_trait]
 pub trait Runner<A, B> {
     async fn func(&self, task: Arc<RwLock<Task<A, B>>>) -> TaskConsumerResult;
+    fn build_filter(&self) -> Option<Document> {
+        None
+    }
 }
 
 #[derive(Default)]
@@ -47,7 +50,7 @@ impl<
 > TaskConsumer<ParamType, StateType> for BasicConsumer<ParamType, StateType, RunnerType>
 {
     fn build_filter(&self) -> Option<Document> {
-        None
+        self.runner.build_filter()
     }
 
     async fn consume(&self, task: Arc<RwLock<Task<ParamType, StateType>>>) -> TaskConsumerResult {
