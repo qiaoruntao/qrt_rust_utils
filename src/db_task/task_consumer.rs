@@ -150,7 +150,7 @@ pub trait TaskConsumer<
             tokio::spawn(async move {
                 let arc = arc1;
                 let consumer = arc.try_read().unwrap();
-                match consumer.run_task_core(arc2, task).await {
+                match consumer.run_task_core(arc2, task.clone()).await {
                     Ok(_) => {}
                     Err(TaskSchedulerError::RunnerPanic) => {
                         error!("runner panic, stop executing now");
