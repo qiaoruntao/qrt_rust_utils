@@ -45,12 +45,12 @@ impl Downloader {
         //     }
         // };
 
-        let download_path = download_directory.join(&download_info.name);
+        let download_path = download_directory.join(sanitize(&download_info.name));
         let download_path_str = download_path.as_os_str().to_str().unwrap();
         match tokio::fs::create_dir_all(&download_directory).await {
             Ok(_) => {}
             Err(err) => {
-                error!("{:?}", &err);
+                error!("create_dir_all failed {:?}", &err);
                 return Err(err.into());
             }
         }

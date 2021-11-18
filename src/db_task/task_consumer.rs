@@ -157,7 +157,7 @@ pub trait TaskConsumer<
                         state.store(false, Ordering::Relaxed);
                     }
                     Err(e) => {
-                        println!("running task failed, {:?}", &e);
+                        println!("running task failed, {:?}, task is {:?}", &e, &task);
                     }
                 }
                 if !duration.is_zero() {
