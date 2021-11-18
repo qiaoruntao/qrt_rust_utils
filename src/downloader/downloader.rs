@@ -50,7 +50,7 @@ impl Downloader {
         match tokio::fs::create_dir_all(&download_directory).await {
             Ok(_) => {}
             Err(err) => {
-                error!("create_dir_all failed {:?}", &err);
+                error!("create_dir_all failed {} {:?}",download_path_str, &err);
                 return Err(err.into());
             }
         }
