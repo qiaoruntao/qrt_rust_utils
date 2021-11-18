@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -157,7 +158,8 @@ pub trait TaskConsumer<
                         state.store(false, Ordering::Relaxed);
                     }
                     Err(e) => {
-                        println!("running task failed, {:?}, task is {:?}", &e, &task);
+                        let read_guard = task.try_read().unwrap();
+                        println!("running task failed, {:?}, task is {:?}", &e, &read_guard);
                     }
                 }
                 if !duration.is_zero() {
