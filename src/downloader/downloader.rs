@@ -29,9 +29,9 @@ impl Downloader {
             for directory in download_info.parent_directories.iter() {
                 let str = sanitize(directory);
                 let str = if str.len() > 250 {
-                    str.split_at(250).0
+                    str.chars().take(125).collect::<String>()
                 } else {
-                    str.as_str()
+                    str
                 };
                 path = path.join(str);
             }
@@ -53,9 +53,9 @@ impl Downloader {
 
         let filename = sanitize(&download_info.name);
         let filename = if filename.len() > 250 {
-            filename.split_at(250).0
+            filename.chars().take(125).collect::<String>()
         } else {
-            filename.as_str()
+            filename
         };
         let download_path = download_directory.join(filename);
         let download_path_str = download_path.as_os_str().to_str().unwrap();
