@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -150,14 +151,15 @@ pub trait TaskConsumer<
             tokio::spawn(async move {
                 let arc = arc1;
                 let consumer = arc.try_read().unwrap();
-                match consumer.run_task_core(arc2, task).await {
+                match consumer.run_task_core(arc2, task.clone()).await {
                     Ok(_) => {}
                     Err(TaskSchedulerError::RunnerPanic) => {
                         error!("runner panic, stop executing now");
                         state.store(false, Ordering::Relaxed);
                     }
                     Err(e) => {
-                        println!("running task failed, {:?}", &e);
+                        let read_guard = task.try_read().unwrap();
+                        println!("running task failed, {:?}, task is {:?}", &e, &read_guard);
                     }
                 }
                 if !duration.is_zero() {

@@ -27,7 +27,13 @@ impl Downloader {
         let download_directory = {
             let mut path = Path::new(&download_config.download_directory).to_path_buf();
             for directory in download_info.parent_directories.iter() {
-                path = path.join(sanitize(directory));
+                let str = sanitize(directory);
+                let str = if str.len() > 250 {
+                    str.chars().take(125).collect::<String>()
+                } else {
+                    str
+                };
+                path = path.join(str);
             }
             path
         };
@@ -45,12 +51,18 @@ impl Downloader {
         //     }
         // };
 
-        let download_path = download_directory.join(&download_info.name);
+        let filename = sanitize(&download_info.name);
+        let filename = if filename.len() > 250 {
+            filename.chars().take(125).collect::<String>()
+        } else {
+            filename
+        };
+        let download_path = download_directory.join(filename);
         let download_path_str = download_path.as_os_str().to_str().unwrap();
         match tokio::fs::create_dir_all(&download_directory).await {
             Ok(_) => {}
             Err(err) => {
-                error!("{:?}", &err);
+                error!("create_dir_all failed {} {:?}",download_path_str, &err);
                 return Err(err.into());
             }
         }
