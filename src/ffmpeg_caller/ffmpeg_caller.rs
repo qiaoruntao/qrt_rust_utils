@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
 use async_recursion::async_recursion;
@@ -79,7 +79,7 @@ fn parse_line(line: &str) -> Progress {
 }
 
 impl FFmpegCaller {
-    pub async fn new<I, S>(args: I, working_directory: &str)
+    pub async fn run<I, S>(args: I, working_directory: &str) -> tokio::io::Result<ExitStatus>
         where
             I: IntoIterator<Item=S>,
             S: AsRef<OsStr>, {
@@ -107,6 +107,7 @@ impl FFmpegCaller {
         // let reader = BufReader::new(output).lines();
         let result = child.wait().await;
         trace!("&result={:?}",&result);
+        result
     }
 }
 
@@ -120,7 +121,7 @@ mod test_ffmpeg_caller {
         let source = "R:\\a.mp4";
         let dest = "R:\\a.mkv";
         let args = vec!["-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "30", "-loglevel", "0", "-user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3844.0 Safari/537.36", "-i", source, "-c", "copy", dest];
-        FFmpegCaller::new(args, ".").await;
+        FFmpegCaller::run(args, ".").await;
     }
 
     #[test]

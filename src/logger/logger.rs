@@ -1,3 +1,5 @@
+use std::io;
+use std::io::stdout;
 use derive_builder::Builder;
 use serde::Deserialize;
 use serde::Serialize;
@@ -8,20 +10,16 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
 use crate::config_manage::config_manager::ConfigManager;
-use crate::logger::fluentd_layer::{FluentdLayer, FluentdLayerConfig};
 
 pub struct Logger {}
 
 #[derive(Debug, Builder, Serialize, Deserialize)]
 pub struct LoggerConfig {
-    pub with_fluentd: bool,
 }
 
 impl Default for LoggerConfig {
     fn default() -> Self {
         LoggerConfig {
-            // disable fluentd because it has severe problem
-            with_fluentd: false,
         }
     }
 }
@@ -32,20 +30,13 @@ impl Logger {
             .or_else(|_| EnvFilter::try_new("info"))
             .unwrap();
         let fmt_layer = fmt::Layer::default()
-            .with_timer(LocalTime::rfc_3339());
+            .with_timer(LocalTime::rfc_3339())
+            .with_writer(std::io::stdout);
         let subscriber = Registry::default()
             // .with(JsonStorageLayer)
             .with(filter_layer)
             .with(fmt_layer);
-        if logger_config.with_fluentd {
-            let config: FluentdLayerConfig =
-                ConfigManager::read_config_with_directory("./config/logger").unwrap();
-            let fluentd_layer = FluentdLayer::generate(&config);
-            tracing::subscriber::set_global_default(subscriber.with(fluentd_layer))
-                .expect("failed to set logger");
-        } else {
-            tracing::subscriber::set_global_default(subscriber).expect("failed to set logger");
-        };
+        tracing::subscriber::set_global_default(subscriber).expect("failed to set logger");
     }
 }
 

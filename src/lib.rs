@@ -21,3 +21,5 @@ pub mod task;
 pub mod tg_notification;
 pub mod youtubedl_utils;
 pub mod ffmpeg_caller;
+pub mod semver;
+pub mod cmd_options;
