@@ -85,7 +85,7 @@ impl<
         if total_cnt == 0 {
             trace!("no task to maintain");
         } else {
-            info!("maintainer runs, task count= {}", guard.len());
+            trace!("maintainer runs, task count= {}", guard.len());
         }
 
         let scheduler_guard = task_scheduler.try_read().unwrap();

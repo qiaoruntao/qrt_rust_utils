@@ -56,18 +56,10 @@ pub trait TaskConsumer<
             error!("task {} already running", &key);
             return Err(TaskSchedulerError::MaintainerError);
         }
-        // check if we are running maintainer
-
         // run the task
         let consumer_result = self.consume(task.clone());
-        // remove maintainer
-        let is_removed = self.remove_running_task(task.clone()).await;
-        if !is_removed {
-            error!("task {} not exists", &key);
-            return Err(TaskSchedulerError::MaintainerError);
-        }
         // update result
-        match consumer_result.await {
+        let result = match consumer_result.await {
             TaskConsumerResult::Completed => task_scheduler_guard.complete_task(task.clone()).await,
             TaskConsumerResult::Cancelled => task_scheduler_guard.cancel_task(task.clone()).await,
             TaskConsumerResult::Failed => {
@@ -77,7 +69,14 @@ pub trait TaskConsumer<
             TaskConsumerResult::RequestStop => {
                 Err(TaskSchedulerError::RunnerPanic)
             }
+        };
+        // remove maintainer
+        let is_removed = self.remove_running_task(task.clone()).await;
+        if !is_removed {
+            error!("task {} not exists", &key);
+            return Err(TaskSchedulerError::MaintainerError);
         }
+        result
     }
     async fn main_loop<T: 'static + TaskConsumer<ParamType, StateType> + Sync + Send>(
         arc_scheduler: Arc<RwLock<TaskScheduler>>,
