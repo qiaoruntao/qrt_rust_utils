@@ -23,3 +23,4 @@ pub mod youtubedl_utils;
 pub mod ffmpeg_caller;
 pub mod semver;
 pub mod cmd_options;
+pub mod proxy_pool;

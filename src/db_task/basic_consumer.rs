@@ -8,7 +8,7 @@ use mongodb::bson::Document;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
-use tracing::{info, trace};
+use tracing::{error, info, trace};
 
 use crate::db_task::task_consumer::{TaskConsumer, TaskConsumerResult};
 use crate::db_task::task_scheduler::TaskScheduler;
@@ -94,7 +94,7 @@ impl<
             match update_result {
                 Ok(_) => {}
                 Err(e) => {
-                    dbg!("{:?}", e);
+                    error!("{:?}", &e);
                 }
             }
         }

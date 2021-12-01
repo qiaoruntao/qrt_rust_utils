@@ -1,4 +1,5 @@
 use std::path::Path;
+use cmd_lib::log::trace;
 
 use config::{Config, ConfigError, File};
 use lazy_static::lazy_static;
@@ -9,7 +10,7 @@ use tracing::info;
 use crate::cmd_options::commandline_options::CommandlineOptions;
 
 lazy_static! {
-    static ref cmd_options:CommandlineOptions=CommandlineOptions::from_args();
+    static ref CMD_OPTIONS:CommandlineOptions=CommandlineOptions::from_args();
 }
 pub struct ConfigManager {}
 
@@ -18,12 +19,26 @@ impl ConfigManager {
         config_directory: &str,
     ) -> Result<T, ConfigError> {
         let mut s = Config::new();
-        if let Some(external_config_directory) = &cmd_options.config_directory {
-            info!("start to load from command line provided config directory {:?}", external_config_directory.as_os_str());
-            let default_file_path = Path::new(external_config_directory).join(config_directory).join("default.toml");
-            s.merge(File::from(default_file_path)).unwrap();
-            let custom_file_path = Path::new(external_config_directory).join(config_directory).join("custom.toml");
-            s.merge(File::from(custom_file_path));
+
+        // read command line arguments in test env can cause error
+        if cfg!(not(test)) {
+            if let Some(external_config_directory) = &CMD_OPTIONS.config_directory {
+                info!("start to load from command line provided config directory {:?}", external_config_directory.as_os_str());
+                let default_file_path = Path::new(external_config_directory).join(config_directory).join("default.toml");
+                match s.merge(File::from(default_file_path)) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        trace!("{}",e);
+                    }
+                }
+                let custom_file_path = Path::new(external_config_directory).join(config_directory).join("custom.toml");
+                match s.merge(File::from(custom_file_path)) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        trace!("{}",e);
+                    }
+                }
+            }
         }
 
         let default_file_path = Path::new(config_directory).join("default.toml");
@@ -31,7 +46,12 @@ impl ConfigManager {
         s.merge(File::from(default_file_path)).unwrap();
         let custom_file_path = Path::new(config_directory).join("custom.toml");
         // load custom
-        s.merge(File::from(custom_file_path));
+        match s.merge(File::from(custom_file_path)) {
+            Ok(_) => {}
+            Err(e) => {
+                trace!("{}",e);
+            }
+        }
         let result: Result<T, ConfigError> = s.try_into();
         result
     }

@@ -1,7 +1,8 @@
 use std::time::Duration;
 
-use reqwest::header::HeaderMap;
 use reqwest::{Client, Proxy};
+use reqwest::header::HeaderMap;
+use tracing::info;
 
 pub struct RequestUtils {}
 
@@ -19,8 +20,11 @@ impl RequestUtils {
             .pool_idle_timeout(Duration::from_secs(5));
         if let Some(timeout) = timeout {
             builder = builder.timeout(timeout);
+        } else {
+            builder = builder.timeout(Duration::from_secs(10));
         }
         if let Some(proxy_address) = proxy_address {
+            info!("proxy_address={}", &proxy_address);
             builder = builder.proxy(Proxy::all(proxy_address).unwrap());
         }
         let client = builder.build().unwrap();

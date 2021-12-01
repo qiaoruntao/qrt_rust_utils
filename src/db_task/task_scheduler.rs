@@ -25,6 +25,7 @@ pub enum TaskSchedulerError {
     TaskExists,
     #[error("no pending task exists")]
     NoPendingTask,
+    // 尝试占用/更新任务的时候可能报这个错
     #[error("no task matched")]
     NoMatchedTask,
     #[error("maintainer error")]
