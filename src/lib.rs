@@ -24,3 +24,4 @@ pub mod ffmpeg_caller;
 pub mod semver;
 pub mod cmd_options;
 pub mod proxy_pool;
+pub mod super_proxy;
