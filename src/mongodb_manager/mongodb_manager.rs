@@ -1,20 +1,14 @@
-
 use std::fmt::Debug;
-
 use std::time::Duration;
 
 use mongodb::{Client, options::ClientOptions};
 use mongodb::{Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::options::{Credential, InsertOneOptions, Tls, TlsOptions, WriteConcern};
-
 use mongodb::options::ServerAddress::Tcp;
 use mongodb::results::InsertOneResult;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
-
-
 
 use crate::mongodb_manager::entity::mongodb_config::MongoDbConfig;
 
@@ -102,6 +96,7 @@ impl MongoDbManager {
 #[cfg(test)]
 mod mongodb_manager_test {
     use std::error::Error;
+
     use tracing::trace;
 
     use crate::config_manage::config_manager::ConfigManager;

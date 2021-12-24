@@ -94,7 +94,8 @@ impl<
             match update_result {
                 Ok(_) => {}
                 Err(e) => {
-                    error!("{:?}", &e);
+                    let task_guard = running_task.read().await;
+                    error!("run_maintainer {:?}, {:?}", &e, &task_guard.param);
                 }
             }
         }

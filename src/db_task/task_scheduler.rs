@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
+use std::time::Duration;
 
 use chrono::Local;
 use futures::TryStreamExt;
@@ -11,13 +12,14 @@ use mongodb::bson::Document;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Cursor;
 use mongodb::error::{ErrorKind, WriteFailure};
+use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 use tracing::trace;
 
 use crate::mongodb_manager::mongodb_manager::MongoDbManager;
-use crate::task::task::{Task, TaskState};
+use crate::task::task::Task;
 
 #[derive(thiserror::Error, Debug)]
 pub enum TaskSchedulerError {
@@ -245,19 +247,11 @@ impl TaskScheduler {
                 {"key":&task.key}
             ]
         };
-        let new_state = TaskState::init(&Local::now(), GLOBAL_WORKER_ID.clone(), &task.option);
-        let update = doc! {
-            "$set":{
-                "task_state":mongodb::bson::to_document( &new_state).unwrap()
-            }
-        };
-
-        // trace!("&filter={:?}",&filter);
-        // trace!("&update={:?}",&update);
+        let update_pipeline = Self::generate_occupy_update_document();
         let mut options = mongodb::options::UpdateOptions::default();
         options.upsert = Some(false);
 
-        let result = collection.update_one(filter, update, Some(options)).await?;
+        let result = collection.update_one(filter, update_pipeline, Some(options)).await?;
         trace!("{:?}",&result);
         if result.matched_count == 0 {
             Err(TaskSchedulerError::NoMatchedTask)
@@ -266,6 +260,53 @@ impl TaskScheduler {
         } else {
             Ok(())
         }
+    }
+
+    pub async fn find_and_occupy_pending_task<ParamType, StateType>(
+        &self,
+        custom_filter: Option<Document>,
+    ) -> Result<Arc<RwLock<Task<ParamType, StateType>>>, TaskSchedulerError>
+        where
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq, {
+        let collection = self
+            .db_manager
+            .lock()
+            .await
+            .get_collection::<Task<ParamType, StateType>>(self.task_collection_name.as_str());
+        let filter = TaskScheduler::generate_pending_task_condition(custom_filter);
+        let mut options=FindOneAndUpdateOptions::default();
+        options.return_document=Some(ReturnDocument::After);
+        let update_pipeline = Self::generate_occupy_update_document();
+        let mut options = mongodb::options::FindOneAndUpdateOptions::default();
+        options.return_document = Some(ReturnDocument::After);
+        let result = collection.find_one_and_update(filter, update_pipeline, Some(options)).await?;
+        trace!("{:?}",&result);
+        match result {
+            None => {
+                Err(TaskSchedulerError::NoPendingTask)
+            }
+            Some(task) => {
+                Ok(Arc::new(RwLock::from(task)))
+            }
+        }
+    }
+
+    fn generate_occupy_update_document() -> Vec<Document> {
+        vec![
+            doc! {
+                "$set":{
+                    "task_state.current_worker_id":&GLOBAL_WORKER_ID.clone(),
+                    "task_state.start_time":"$$NOW",
+                    "task_state.ping_time":"$$NOW",
+                    "task_state.next_ping_time": {
+                        "$dateAdd": {
+                            "startDate": "$$NOW", "unit": "millisecond", "amount": "$option.ping_interval"
+                        }
+                    },
+                }
+            }
+        ]
     }
 
     // update task ping time
@@ -415,6 +456,56 @@ impl TaskScheduler {
             Ok(())
         }
     }
+
+    // mark task as cancelled
+    pub async fn fail_task<ParamType, StateType>(
+        &self,
+        task: Arc<RwLock<Task<ParamType, StateType>>>,
+    ) -> Result<(), TaskSchedulerError>
+        where
+            ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+            StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
+    {
+        let collection = self
+            .db_manager
+            .lock()
+            .await
+            .get_collection::<Task<ParamType, StateType>>(self.task_collection_name.as_str());
+        let guard = task.try_read().unwrap();
+        let task = guard.deref();
+        // we need to make sure the task is being processed by ourself
+        let filter = doc! {
+            "task_state.complete_time": mongodb::bson::Bson::Null,
+            "task_state.cancel_time": mongodb::bson::Bson::Null,
+            // TODO: add restriction if possible
+            // "task_state.current_worker_id": &task.task_state.current_worker_id,
+            "key":&task.key
+        };
+        let update = vec![
+            doc! {
+                "$set":{
+                    "task_state.cancel_time":"$$NOW",
+                    "task_state.current_worker_id":mongodb::bson::Bson::Null,
+                    "task_state.next_ping_time": mongodb::bson::Bson::Null,
+                }
+            }
+        ];
+
+        trace!("&filter={:?}",&filter);
+        trace!("&update={:?}",&update);
+        let mut options = mongodb::options::UpdateOptions::default();
+        options.upsert = Some(false);
+
+        let result = collection.update_one(filter, update, Some(options)).await?;
+        trace!("&result={:?}",&result);
+        if result.matched_count == 0 {
+            Err(TaskSchedulerError::NoMatchedTask)
+        } else if result.modified_count == 0 && result.upserted_id == None {
+            Err(TaskSchedulerError::CancelTaskFailed)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -458,7 +549,8 @@ mod test_task_scheduler {
                 complete_time: None,
                 cancel_time: None,
                 current_worker_id: None,
-                progress: None,
+                progress: Some(0),
+                retry_times: Some(0),
             },
             param: 1,
             state: DefaultTaskState::default(),

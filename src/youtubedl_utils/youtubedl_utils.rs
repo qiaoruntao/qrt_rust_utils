@@ -1,6 +1,5 @@
-use std::process::{Output, Stdio};
+use std::process::Stdio;
 
-use cmd_lib::{CmdResult, run_fun};
 use tokio::process::Command;
 use tracing::error;
 
@@ -25,7 +24,7 @@ impl YoutubeDlUtils {
                 Command::new("youtube-dl")
             };
 
-        let mut command =
+        let command =
             if cfg!(unix) {
                 // TODO: how to fix this?
                 let binary_path = "/home/qiaoruntao/.local/bin/youtube-dl";//run_fun!(which r"youtube-dl")?;
@@ -77,8 +76,6 @@ impl YoutubeDlUtils {
 
 #[cfg(test)]
 mod youtubedl_test {
-    use std::time::Duration;
-
     use crate::youtubedl_utils::youtubedl_utils::YoutubeDlUtils;
 
     #[tokio::test(flavor = "current_thread")]
@@ -88,20 +85,17 @@ mod youtubedl_test {
         #[cfg(unix)]
             let directory = "/mnt/r";
         let handle1 = tokio::spawn({
-            let directory = directory.clone();
             async move {
                 let result = YoutubeDlUtils::download("aaa", directory, "http://pull-hls-l11.douyincdn.com/stage/stream-109808439404265617.m3u8").await;
                 dbg!(&result);
             }
         });
         let handle2 = tokio::spawn({
-            let directory = directory.clone();
             async move {
                 let result = YoutubeDlUtils::download("bbb", directory, "http://pull-hls-l11.douyincdn.com/stage/stream-109808439404265617.m3u8").await;
                 dbg!(&result);
             }
         });
-        tokio::join! {handle1, handle2}
-        ;
+        dbg!(&tokio::join! {handle1, handle2});
     }
 }

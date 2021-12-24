@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use tracing::{error, info};
+use tracing::{error};
 use url::Url;
 
 use crate::downloader::download_config::DownloadConfig;
@@ -39,7 +39,7 @@ impl Downloader {
         };
         let parsed_url = Url::parse(url.as_str()).unwrap();
         let all_split = parsed_url.path_segments().unwrap();
-        let last_part = all_split.last().unwrap();
+        let _last_part = all_split.last().unwrap();
         // let filename = match last_part.split('.').last() {
         //     None => {
         //         info!("extension info not found, url={}", url);

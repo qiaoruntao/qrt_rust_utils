@@ -57,8 +57,14 @@ pub struct TaskState {
     deserialize_with = "deserialize_datetime_as_datetime_option"
     )]
     pub cancel_time: Option<DateTime<Local>>,
+    #[serde(
+    serialize_with = "serialize_datetime_option_as_datetime",
+    deserialize_with = "deserialize_datetime_as_datetime_option"
+    )]
+    pub previous_fail_time: Option<DateTime<Local>>,
     pub current_worker_id: Option<i64>,
     pub progress: Option<u32>,
+    pub retry_times: Option<u32>,
 }
 
 impl TaskState {
@@ -76,8 +82,10 @@ impl TaskState {
             next_retry_time: None,
             complete_time: None,
             cancel_time: None,
+            previous_fail_time: None,
             current_worker_id: Some(worker_id),
             progress: None,
+            retry_times: None
         }
     }
 }
@@ -90,9 +98,11 @@ impl Default for TaskState {
             next_ping_time: None,
             next_retry_time: None,
             complete_time: None,
+            previous_fail_time: None,
             cancel_time: None,
             current_worker_id: None,
             progress: None,
+            retry_times: None
         }
     }
 }

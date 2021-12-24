@@ -121,7 +121,7 @@ mod test_ffmpeg_caller {
         let source = "R:\\a.mp4";
         let dest = "R:\\a.mkv";
         let args = vec!["-reconnect", "1", "-reconnect_at_eof", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "30", "-loglevel", "0", "-user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3844.0 Safari/537.36", "-i", source, "-c", "copy", dest];
-        FFmpegCaller::run(args, ".").await;
+        dbg!(&FFmpegCaller::run(args, ".").await);
     }
 
     #[test]

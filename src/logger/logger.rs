@@ -1,5 +1,5 @@
-use std::io;
-use std::io::stdout;
+
+
 use derive_builder::Builder;
 use serde::Deserialize;
 use serde::Serialize;
@@ -9,7 +9,7 @@ use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
-use crate::config_manage::config_manager::ConfigManager;
+
 
 pub struct Logger {}
 
@@ -25,7 +25,7 @@ impl Default for LoggerConfig {
 }
 
 impl Logger {
-    pub fn init_logger(logger_config: &LoggerConfig) {
+    pub fn init_logger(_logger_config: &LoggerConfig) {
         let filter_layer = EnvFilter::try_from_default_env()
             .or_else(|_| EnvFilter::try_new("info"))
             .unwrap();

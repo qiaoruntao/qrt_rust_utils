@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -106,44 +105,25 @@ pub trait TaskConsumer<
             };
             // find a task
             let task_scheduler_guard = arc2.try_read().unwrap();
-            // TODO: merge find and occupy for relentless check
-            let result = task_scheduler_guard
-                .find_next_pending_task(filter.clone())
-                .await;
+
+            let result = task_scheduler_guard.find_and_occupy_pending_task(filter.clone()).await;
             let task = match result {
-                Ok(task) => task,
+                Err(TaskSchedulerError::NoPendingTask) => {
+                    trace!("no pending task found");
+                    // we have to wait for a while and then check
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
                 Err(e) => {
-                    match e {
-                        TaskSchedulerError::NoPendingTask => {
-                            trace!("no pending task found");
-                            // we have to wait for a while and then check
-                            tokio::time::sleep(Duration::from_secs(1)).await;
-                            continue;
-                        }
-                        _ => {
-                            // unexpected error
-                            error!("{:?}", e);
-                            break;
-                        }
-                    }
+                    // unexpected error
+                    error!("{:?}", e);
+                    break;
+                }
+                Ok(value) => {
+                    value
                 }
             };
-            info!("new task found");
-            // occupy the task
-            if let Err(e) = task_scheduler_guard.occupy_pending_task(task.clone()).await {
-                match e {
-                    TaskSchedulerError::OccupyTaskFailed | TaskSchedulerError::NoMatchedTask => {
-                        // this is ok, there may still tasks pending, check again now
-                        info!("occupy task failed, {:?}", e);
-                    }
-                    _ => {
-                        // wait for a while in case something bad happens
-                        error!("unknown error while occupying task {:?}", e);
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                }
-                continue;
-            }
+
             drop(task_scheduler_guard);
             let state = running_state.clone();
             // send to background
