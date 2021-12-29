@@ -20,11 +20,13 @@ impl NotificationManager {
         }
     }
     pub fn send_notification(&self, msg: TgMessage) {
+        let task_options = Default::default();
+        let task_state = TaskState::from(&task_options);
         let task = Task {
             key: msg.gen_hash().to_string(),
             meta: TaskMeta::create_now("Telegram Message".into(), "utils".into()),
-            option: Default::default(),
-            task_state: TaskState::default(),
+            option: task_options,
+            task_state,
             param: msg,
             state: DefaultTaskState::default(),
         };

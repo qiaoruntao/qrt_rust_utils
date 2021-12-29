@@ -1,5 +1,3 @@
-
-
 use derive_builder::Builder;
 use serde::Deserialize;
 use serde::Serialize;
@@ -9,25 +7,30 @@ use tracing_subscriber::fmt::time::LocalTime;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;
 
-
-
 pub struct Logger {}
 
 #[derive(Debug, Builder, Serialize, Deserialize)]
 pub struct LoggerConfig {
+    #[serde(default = "default_level")]
+    pub level: String,
+}
+
+fn default_level()->String{
+    "info".to_string()
 }
 
 impl Default for LoggerConfig {
     fn default() -> Self {
         LoggerConfig {
+            level: default_level()
         }
     }
 }
 
 impl Logger {
-    pub fn init_logger(_logger_config: &LoggerConfig) {
+    pub fn init_logger(logger_config: &LoggerConfig) {
         let filter_layer = EnvFilter::try_from_default_env()
-            .or_else(|_| EnvFilter::try_new("info"))
+            .or_else(|_| EnvFilter::try_new(&logger_config.level))
             .unwrap();
         let fmt_layer = fmt::Layer::default()
             .with_timer(LocalTime::rfc_3339())

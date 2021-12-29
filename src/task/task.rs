@@ -64,34 +64,12 @@ pub struct TaskState {
     pub previous_fail_time: Option<DateTime<Local>>,
     pub current_worker_id: Option<i64>,
     pub progress: Option<u32>,
-    pub retry_times: Option<u32>,
+    // how many times can we retry
+    pub retry_time_left: Option<u32>,
 }
 
-impl TaskState {
-    pub fn init(
-        start_time: &DateTime<Local>,
-        worker_id: i64,
-        task_option: &TaskOptions,
-    ) -> TaskState {
-        let next_ping_time =
-            *start_time + chrono::Duration::from_std(task_option.ping_interval).unwrap();
-        TaskState {
-            start_time: Some(*start_time),
-            ping_time: Some(*start_time),
-            next_ping_time: Some(next_ping_time),
-            next_retry_time: None,
-            complete_time: None,
-            cancel_time: None,
-            previous_fail_time: None,
-            current_worker_id: Some(worker_id),
-            progress: None,
-            retry_times: None
-        }
-    }
-}
-
-impl Default for TaskState {
-    fn default() -> Self {
+impl From<&TaskOptions> for TaskState {
+    fn from(task_options: &TaskOptions) -> Self {
         TaskState {
             start_time: None,
             ping_time: None,
@@ -102,7 +80,7 @@ impl Default for TaskState {
             cancel_time: None,
             current_worker_id: None,
             progress: None,
-            retry_times: None
+            retry_time_left: Some(task_options.max_retries),
         }
     }
 }

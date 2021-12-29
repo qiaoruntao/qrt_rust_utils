@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
-use std::time::Duration;
 
 use chrono::Local;
 use futures::TryStreamExt;
@@ -12,7 +11,7 @@ use mongodb::bson::Document;
 use mongodb::bson::oid::ObjectId;
 use mongodb::Cursor;
 use mongodb::error::{ErrorKind, WriteFailure};
-use mongodb::options::{FindOneAndUpdateOptions, ReturnDocument};
+use mongodb::options::ReturnDocument;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
@@ -201,6 +200,7 @@ impl TaskScheduler {
     fn generate_pending_task_condition(custom_filter: Option<Document>) -> Document {
         let mut conditions = vec![
             doc! {"task_state.complete_time":Null},
+            doc! {"task_state.complete_time":Null},
             doc! {
                 "$or":[
                     // not started
@@ -269,14 +269,9 @@ impl TaskScheduler {
         where
             ParamType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq,
             StateType: Debug + Serialize + DeserializeOwned + Unpin + Sync + Send + PartialEq, {
-        let collection = self
-            .db_manager
-            .lock()
-            .await
+        let collection = self.db_manager.lock().await
             .get_collection::<Task<ParamType, StateType>>(self.task_collection_name.as_str());
         let filter = TaskScheduler::generate_pending_task_condition(custom_filter);
-        let mut options=FindOneAndUpdateOptions::default();
-        options.return_document=Some(ReturnDocument::After);
         let update_pipeline = Self::generate_occupy_update_document();
         let mut options = mongodb::options::FindOneAndUpdateOptions::default();
         options.return_document = Some(ReturnDocument::After);
@@ -361,7 +356,7 @@ impl TaskScheduler {
     ) -> Document {
         doc! {
             "task_state.complete_time": mongodb::bson::Bson::Null,
-            "task_state.current_worker_id": &GLOBAL_WORKER_ID.clone(),
+            // "task_state.current_worker_id": &GLOBAL_WORKER_ID.clone(),
             "task_state.next_ping_time": { "$gte": mongodb::bson::DateTime::now() },
             "task_state.ping_time": { "$lte": mongodb::bson::DateTime::now() },
             "key":&task.key
@@ -430,7 +425,7 @@ impl TaskScheduler {
         let filter = doc! {
             "task_state.complete_time": mongodb::bson::Bson::Null,
             "task_state.cancel_time": mongodb::bson::Bson::Null,
-            // "task_state.current_worker_id": &task.task_state.current_worker_id,
+            "task_state.current_worker_id": &task.task_state.current_worker_id,
             "key":&task.key
         };
         let update = doc! {
@@ -484,7 +479,12 @@ impl TaskScheduler {
         let update = vec![
             doc! {
                 "$set":{
-                    "task_state.cancel_time":"$$NOW",
+                    "task_state.previous_fail_time":"$$NOW",
+                    "task_state.retry_time_left":{
+                        "$add": [
+                            -1,{"$ifNull":["$task_state.retry_time_left",1]}
+                        ]
+                    },
                     "task_state.current_worker_id":mongodb::bson::Bson::Null,
                     "task_state.next_ping_time": mongodb::bson::Bson::Null,
                 }
@@ -513,13 +513,13 @@ mod test_task_scheduler {
     use std::sync::Arc;
 
     use chrono::Local;
-    use futures::TryStreamExt;
     use lazy_static::lazy_static;
     use tokio::sync::RwLock;
-    use tracing::{error, trace};
+    use tracing::trace;
 
     use crate::config_manage::config_manager::ConfigManager;
     use crate::db_task::task_scheduler::TaskScheduler;
+    use crate::logger::logger::{Logger, LoggerConfig};
     use crate::mongodb_manager::mongodb_manager::MongoDbManager;
     use crate::task::task::{DefaultTaskState, Task, TaskMeta, TaskOptions, TaskState};
 
@@ -533,6 +533,8 @@ mod test_task_scheduler {
         let db_manager = MongoDbManager::new(result, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager, COLLECTION_NAME.clone());
         let name = Local::now().timestamp().to_string();
+        let task_options = TaskOptions::default();
+        let task_state = TaskState::from(&task_options);
         let task = Task {
             key: name,
             meta: TaskMeta {
@@ -540,18 +542,8 @@ mod test_task_scheduler {
                 create_time: Local::now(),
                 creator: "default".to_string(),
             },
-            option: TaskOptions::default(),
-            task_state: TaskState {
-                start_time: None,
-                ping_time: None,
-                next_ping_time: None,
-                next_retry_time: None,
-                complete_time: None,
-                cancel_time: None,
-                current_worker_id: None,
-                progress: Some(0),
-                retry_times: Some(0),
-            },
+            option: task_options,
+            task_state,
             param: 1,
             state: DefaultTaskState::default(),
         };
@@ -575,31 +567,9 @@ mod test_task_scheduler {
         let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
         let db_manager = MongoDbManager::new(result, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager, COLLECTION_NAME.clone());
-        let mut all_pending_tasks = scheduler.find_pending_task::<i32, i32>(None).await.unwrap();
-
-        let task = match all_pending_tasks.try_next().await {
-            Err(e) => {
-                error!("{:?}", &e);
-                return;
-            }
-            Ok(task) => task.unwrap(),
-        };
-        let arc = Arc::new(RwLock::new(task));
-        let result1 = tokio::spawn(async move {
-            let occupy_result = scheduler.occupy_pending_task(arc.clone()).await;
-            trace!("&occupy_result={:?}",&occupy_result);
-            let task = match scheduler.fetch_task(arc).await {
-                Err(e) => {
-                    error!("{:?}", e);
-                    panic!()
-                }
-                Ok(task) => task,
-            };
-            let complete_result = scheduler.complete_task(Arc::new(RwLock::new(task))).await;
-            trace!("&complete_result={:?}",&complete_result);
-        })
-            .await;
-        trace!("&result1={:?}",&result1);
+        let arc = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
+        let complete_result = scheduler.complete_task(arc).await;
+        trace!("&result1={:?}",&complete_result);
     }
 
     #[tokio::test]
@@ -607,19 +577,22 @@ mod test_task_scheduler {
         let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
         let db_manager = MongoDbManager::new(result, "Logger").unwrap();
         let scheduler = TaskScheduler::new(db_manager, COLLECTION_NAME.clone());
-        let mut all_pending_tasks = scheduler.find_pending_task::<i32, i32>(None).await.unwrap();
-
-        let task = match all_pending_tasks.try_next().await {
-            Err(e) => {
-                error!("{:?}", &e);
-                return;
-            }
-            Ok(task) => task.unwrap(),
-        };
-        let arc = Arc::new(RwLock::new(task));
-        let occupy_result = scheduler.occupy_pending_task(arc.clone()).await;
-        trace!("&occupy_result={:?}",&occupy_result);
+        let arc = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
         let complete_result = scheduler.cancel_task(arc).await;
         trace!("&complete_result={:?}",&complete_result);
+    }
+
+    #[tokio::test]
+    async fn fail_pending_task() {
+        let logger_config = LoggerConfig {
+            level: "trace".to_string()
+        };
+        Logger::init_logger(&logger_config);
+        let result = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
+        let db_manager = MongoDbManager::new(result, "Logger").unwrap();
+        let scheduler = TaskScheduler::new(db_manager, COLLECTION_NAME.clone());
+        let arc = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
+        let result = scheduler.fail_task(arc).await;
+        trace!("&complete_result={:?}",&result);
     }
 }

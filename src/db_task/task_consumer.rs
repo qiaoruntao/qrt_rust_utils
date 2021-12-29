@@ -61,10 +61,7 @@ pub trait TaskConsumer<
         let result = match consumer_result.await {
             TaskConsumerResult::Completed => task_scheduler_guard.complete_task(task.clone()).await,
             TaskConsumerResult::Cancelled => task_scheduler_guard.cancel_task(task.clone()).await,
-            TaskConsumerResult::Failed => {
-                // TODO: do nothing, wait for timeout retry
-                Err(TaskSchedulerError::TaskFailedError)
-            }
+            TaskConsumerResult::Failed => task_scheduler_guard.fail_task(task.clone()).await,
             TaskConsumerResult::RequestStop => {
                 Err(TaskSchedulerError::RunnerPanic)
             }
