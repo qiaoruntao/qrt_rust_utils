@@ -200,7 +200,6 @@ impl TaskScheduler {
     fn generate_pending_task_condition(custom_filter: Option<Document>) -> Document {
         let mut conditions = vec![
             doc! {"task_state.complete_time":Null},
-            doc! {"task_state.complete_time":Null},
             doc! {
                 "$or":[
                     // not started
