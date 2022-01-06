@@ -210,6 +210,14 @@ impl TaskScheduler {
                             {"task_state.next_ping_time":{"$ne":Null}},
                             {"task_state.next_ping_time":{"$lte":mongodb::bson::DateTime::now()}}
                         ]
+                    },
+                    // failed and wait for restart
+                    {
+                        "$and":[
+                            {"task_state.previous_fail_time":{"$ne":Null}},
+                            {"task_state.retry_time_left":{"$gt":0}},
+                            // {"task_state.previous_fail_time":{"$lte":mongodb::bson::DateTime::now()}}
+                        ]
                     }
                 ]
             },
