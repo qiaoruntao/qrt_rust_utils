@@ -200,7 +200,6 @@ impl TaskScheduler {
     fn generate_pending_task_condition(custom_filter: Option<Document>) -> Document {
         let mut conditions = vec![
             doc! {"task_state.complete_time":Null},
-            doc! {"task_state.complete_time":Null},
             doc! {
                 "$or":[
                     // not started
@@ -210,6 +209,14 @@ impl TaskScheduler {
                         "$and":[
                             {"task_state.next_ping_time":{"$ne":Null}},
                             {"task_state.next_ping_time":{"$lte":mongodb::bson::DateTime::now()}}
+                        ]
+                    },
+                    // failed and wait for restart
+                    {
+                        "$and":[
+                            {"task_state.previous_fail_time":{"$ne":Null}},
+                            {"task_state.retry_time_left":{"$gt":0}},
+                            // {"task_state.previous_fail_time":{"$lte":mongodb::bson::DateTime::now()}}
                         ]
                     }
                 ]

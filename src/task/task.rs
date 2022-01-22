@@ -158,7 +158,7 @@ pub fn serialize_datetime_option_as_datetime<S: Serializer>(
     match val {
         None => serializer.serialize_none(),
         Some(duration) => {
-            let datetime = mongodb::bson::DateTime::from_chrono(duration.clone());
+            let datetime = mongodb::bson::DateTime::from_chrono(*duration);
             datetime.serialize(serializer)
         }
     }
@@ -184,7 +184,7 @@ pub fn serialize_datetime_as_datetime<S: Serializer>(
     val: &DateTime<Local>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    let datetime = mongodb::bson::DateTime::from_chrono(val.clone());
+    let datetime = mongodb::bson::DateTime::from_chrono(*val);
     datetime.serialize(serializer)
 }
 

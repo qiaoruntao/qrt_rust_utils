@@ -11,7 +11,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info, trace};
 
 use crate::db_task::task_consumer::{TaskConsumer, TaskConsumerResult};
-use crate::db_task::task_scheduler::TaskScheduler;
+use crate::db_task::task_scheduler::{TaskScheduler, TaskSchedulerError};
 use crate::task::task::Task;
 
 #[async_trait]
@@ -70,13 +70,23 @@ impl<
         task2remove: Arc<RwLock<Task<ParamType, StateType>>>,
     ) -> bool {
         let mut guard = self.running_tasks.lock().await;
-        for (index, task) in guard.iter().enumerate() {
-            if task.try_read().unwrap().deref() == task2remove.try_read().unwrap().deref() {
-                guard.swap_remove(index);
-                return true;
-            }
+        let len = guard.len();
+        let target_index = (0..len)
+            .find(|&index| {
+                let task = &guard[index];
+                let current_task_guard = task.try_read().unwrap();
+                let current_task = current_task_guard.deref();
+                let target_task_guard = task2remove.try_read().unwrap();
+                let target_task = target_task_guard.deref();
+                current_task == target_task
+            }).unwrap_or(len);
+        if target_index == len {
+            error!("failed to remove pending task");
+            false
+        } else {
+            guard.swap_remove(target_index);
+            true
         }
-        false
     }
 
     async fn run_maintainer(&self, task_scheduler: Arc<RwLock<TaskScheduler>>) {
