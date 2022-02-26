@@ -517,7 +517,7 @@ impl TaskScheduler {
 
 #[cfg(test)]
 mod test_task_scheduler {
-    use std::sync::Arc;
+    use std::sync::{Arc};
 
     use chrono::Local;
     use lazy_static::lazy_static;
@@ -567,6 +567,21 @@ mod test_task_scheduler {
             let result1 = scheduler.find_pending_task::<i32, i32>(None).await.unwrap();
             println!("{:?}", &result1);
         });
+    }
+
+    #[tokio::test]
+    async fn find_pending_task_sequence() {
+        let mongodb_config = ConfigManager::read_config_with_directory("./config/mongo").unwrap();
+        let db_manager = MongoDbManager::new(mongodb_config, "Logger").unwrap();
+        let scheduler = TaskScheduler::new(db_manager, COLLECTION_NAME.clone());
+        let result = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
+        println!("{:?}", &result);
+        let result = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
+        println!("{:?}", &result);
+        let result = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
+        println!("{:?}", &result);
+        let result = scheduler.find_and_occupy_pending_task::<i32, i32>(None).await.unwrap();
+        println!("{:?}", &result);
     }
 
     #[tokio::test]
