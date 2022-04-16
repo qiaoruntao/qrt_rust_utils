@@ -1,8 +1,8 @@
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
 use tracing_honeycomb::{
-    new_honeycomb_telemetry_layer, register_dist_tracing_root, SpanId,
-    TraceId,
+    new_honeycomb_telemetry_layer, register_dist_tracing_root, TraceId,
 };
+pub use tracing_honeycomb;
 use tracing_subscriber::{EnvFilter, registry};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -11,6 +11,7 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
     let telemetry_layer = {
         match option_env!("HoneycombKey") {
             None => {
+                warn!("HoneycombKey not provided");
                 None
             }
             Some(honeycomb_key) => {
@@ -28,20 +29,25 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
     };
     let mut filter = EnvFilter::from_default_env()
         .add_directive(LevelFilter::INFO.into());
+    // TODO: can be replaced by rust-log env variable
     if let Some(str) = rust_log_config {
         for segment in str.split(',') {
             filter = filter.add_directive(segment.parse().expect("cannot parse rust log config"));
         }
     }
-    let mut subscriber = registry::Registry::default() // provide underlying span data store
-        .with(filter) // filter out low-level debug tracing (eg tokio executor)
-        .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+    let registry = registry::Registry::default();
     if let Some(telemetry_layer) = telemetry_layer {
-        let subscriber = subscriber.with(telemetry_layer); // publish to honeycomb backend
+        let subscriber = registry
+            .with(telemetry_layer)
+            .with(filter) // filter out low-level debug tracing (eg tokio executor)
+            .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
     } else {
+        let subscriber = registry
+            .with(filter) // filter out low-level debug tracing (eg tokio executor)
+            .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
-    }
+    };
 }
 
 #[instrument]

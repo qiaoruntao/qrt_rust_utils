@@ -1,13 +1,11 @@
-use std::ffi::OsStr;
-use std::process::{ExitStatus, Stdio};
-use std::time::Duration;
+use std::process::Stdio;
 
+use anyhow::anyhow;
 use async_recursion::async_recursion;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines};
-use tokio::io::{AsyncBufRead, AsyncRead};
-use tokio::process::{ChildStdout, Command};
+use tokio::io::AsyncRead;
+use tokio::process::Command;
 use tracing::{debug, error, info};
-use tracing::field::debug;
 
 pub struct YoutubeDlManager {}
 
@@ -20,6 +18,7 @@ async fn check_progress<T: 'static + AsyncRead + Unpin + Send>(mut reader: Lines
         } else {
             info!("{}",str);
         }
+        // TODO: best practise?
         tokio::spawn(check_progress(reader, is_error)).await.unwrap()
     } else {
         Ok(())
@@ -27,24 +26,67 @@ async fn check_progress<T: 'static + AsyncRead + Unpin + Send>(mut reader: Lines
 }
 
 impl YoutubeDlManager {
-    pub async fn download(url: &str, path: &str) {
+    // TODO: 返回值?
+    pub async fn download(url: &str, path: &str) -> anyhow::Result<()> {
         let mut command = Command::new("youtube-dl");
-        let command = command
+        let useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3844.0 Safari/537.36";
+        let mut command = command
             .stdin(Stdio::null())
-            .stderr(Stdio::piped())
-            .stdout(Stdio::piped())
-            .arg("--help");
-        let mut child = command.spawn().unwrap();
-        if let Some(output) = child.stdout.take() {
-            let lines = BufReader::new(output).lines();
-            tokio::spawn(check_progress(lines, false));
+            // make sure we won't retry infinitely
+            .arg("--skip-unavailable-fragments")
+            .arg("--retries")
+            .arg("10")
+            .arg("--fragment-retries")
+            .arg("10")
+            // broadcasting
+            .arg("--hls-use-mpegts")
+            .arg("--user-agent")
+            .arg(useragent)
+            .arg("--format")
+            .arg("best")
+            .arg("--no-part")
+            .arg(url)
+            .arg("-o")
+            // sanitize template cause all parameters can be generated previously
+            .arg(path);
+        if cfg!(debug_assertions) {
+            command = command
+                .stderr(Stdio::piped())
+                .stdout(Stdio::piped());
+        }else{
+            command = command
+                .stderr(Stdio::null())
+                .stdout(Stdio::null());
         }
-        if let Some(output) = child.stderr.take() {
-            let lines = BufReader::new(output).lines();
-            tokio::spawn(check_progress(lines, true));
+        let mut child = match command.spawn() {
+            Ok(child) => {
+                child
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
+        };
+        if cfg!(debug_assertions) {
+            if let Some(output) = child.stdout.take() {
+                let lines = BufReader::new(output).lines();
+                tokio::spawn(check_progress(lines, false));
+            }
+            if let Some(output) = child.stderr.take() {
+                let lines = BufReader::new(output).lines();
+                tokio::spawn(check_progress(lines, true));
+            }
         }
         let x = child.wait().await;
-        dbg!(x);
+        match x {
+            Ok(value) => {
+                debug!("{:?}", value);
+                Ok(())
+            }
+            Err(e) => {
+                // 似乎没遇到过
+                Err(anyhow!(e))
+            }
+        }
     }
 }
 
@@ -56,6 +98,6 @@ mod test {
     #[tokio::test]
     async fn test_download() {
         init_logger("test-youtube-dl", None);
-        YoutubeDlManager::download("", "").await;
+        YoutubeDlManager::download("http://pull-hls-l26.douyincdn.com/stage/stream-110735334551584907.m3u8", "D:\\test%(timestamp)s.mp4").await;
     }
 }
