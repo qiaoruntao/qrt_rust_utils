@@ -1,3 +1,0 @@
-server_url = "localhost:24224"
-tag = "logger.rust-util"
-instance_name = "TestDevice"
