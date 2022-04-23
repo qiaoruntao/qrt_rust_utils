@@ -11,7 +11,8 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
     let telemetry_layer = {
         match option_env!("HoneycombKey") {
             None => {
-                warn!("HoneycombKey not provided");
+                // no logger now
+                eprintln!("HoneycombKey not provided");
                 None
             }
             Some(honeycomb_key) => {
@@ -37,12 +38,14 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
     }
     let registry = registry::Registry::default();
     if let Some(telemetry_layer) = telemetry_layer {
+        println!("init logger with telemetry now");
         let subscriber = registry
             .with(telemetry_layer)
             .with(filter) // filter out low-level debug tracing (eg tokio executor)
             .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
     } else {
+        println!("init logger without telemetry now");
         let subscriber = registry
             .with(filter) // filter out low-level debug tracing (eg tokio executor)
             .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
