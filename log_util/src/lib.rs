@@ -1,3 +1,5 @@
+use std::env;
+
 use tracing::{info, instrument, warn};
 use tracing_honeycomb::{
     new_honeycomb_telemetry_layer, register_dist_tracing_root, TraceId,
@@ -9,16 +11,16 @@ use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'static str>) {
     let telemetry_layer = {
-        match option_env!("HoneycombKey") {
-            None => {
+        match env::var("HoneycombKey") {
+            Err(e) => {
                 // no logger now
-                eprintln!("HoneycombKey not provided");
+                eprintln!("cannot get HoneycombKey {}", &e);
                 None
             }
-            Some(honeycomb_key) => {
+            Ok(honeycomb_key) => {
                 let honeycomb_config = libhoney::Config {
                     options: libhoney::client::Options {
-                        api_key: String::from(honeycomb_key),
+                        api_key: honeycomb_key,
                         dataset: "dag-cache".to_string(), // FIXME: rename if copying this example
                         ..libhoney::client::Options::default()
                     },
