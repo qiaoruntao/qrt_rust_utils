@@ -63,6 +63,7 @@ fn foo() {
     info!("test");
 }
 
+#[cfg(test)]
 mod test {
     use std::time::Duration;
 
