@@ -1,5 +1,6 @@
 use std::env;
 
+pub use tracing;
 use tracing::{info, instrument, warn};
 use tracing_honeycomb::{
     new_honeycomb_telemetry_layer, register_dist_tracing_root, TraceId,
