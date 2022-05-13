@@ -1,6 +1,9 @@
+use db_task::app::common::TaskAppBasicOperations;
 use db_task::app::consumer::{TaskConsumeCore, TaskConsumeFunc, TaskConsumer};
 use db_task::app::producer::TaskProducer;
-use db_task::task::{TaskConfig, TaskInfo, TaskRequest};
+use db_task::task::TaskConfig;
+use db_task::task::TaskInfo;
+use db_task::task::TaskRequest;
 use db_task::tasker::single_tasker_producer::SingleTaskerProducer;
 
 use crate::entity::tg_message::TgMessage;
@@ -26,8 +29,8 @@ impl NotificationManager {
     }
     pub async fn init(connection_str: &str, collection_name: &str) -> NotificationManager {
         let notification_collection = SingleTaskerProducer::init(connection_str, collection_name).await;
-        NotificationManager{
-            manager:notification_collection
+        NotificationManager {
+            manager: notification_collection
         }
     }
 }
