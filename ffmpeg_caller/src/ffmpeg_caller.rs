@@ -5,10 +5,9 @@ use std::time::Duration;
 use async_recursion::async_recursion;
 use regex::Regex;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines};
-use tokio::io::{AsyncBufRead, AsyncRead};
-use tokio::process::{ChildStdout, Command};
+use tokio::io::AsyncRead;
+use tokio::process::Command;
 use tracing::{debug, error, info};
-use tracing::field::debug;
 
 use crate::ffmpeg_progress::{Progress, Status};
 

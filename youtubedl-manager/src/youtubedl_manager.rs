@@ -53,7 +53,7 @@ impl YoutubeDlManager {
             command = command
                 .stderr(Stdio::piped())
                 .stdout(Stdio::piped());
-        }else{
+        } else {
             command = command
                 .stderr(Stdio::null())
                 .stdout(Stdio::null());
@@ -90,14 +90,16 @@ impl YoutubeDlManager {
     }
 }
 
+#[cfg(test)]
 mod test {
     use log_util::init_logger;
 
     use crate::youtubedl_manager::YoutubeDlManager;
 
+    //noinspection HttpUrlsUsage
     #[tokio::test]
     async fn test_download() {
         init_logger("test-youtube-dl", None);
-        YoutubeDlManager::download("http://pull-hls-l26.douyincdn.com/stage/stream-110735334551584907.m3u8", "D:\\test%(timestamp)s.mp4").await;
+        YoutubeDlManager::download("http://pull-hls-l26.douyincdn.com/stage/stream-110735334551584907.m3u8", "D:\\test%(timestamp)s.mp4").await.unwrap();
     }
 }
