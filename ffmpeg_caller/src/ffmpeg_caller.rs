@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::fmt::Debug;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
@@ -91,25 +92,21 @@ impl FfmpegCaller {
         let mut command = Command::new("ffmpeg");
         let command = command
             .stdin(Stdio::null())
-            .stderr(Stdio::piped())
-            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
             .kill_on_drop(true)
-            .arg("-stats")
-            .arg("-y")
-            .arg("-loglevel")
-            .arg("quiet")
             .args(args)
             .current_dir(working_directory);
-        dbg!(&command);
+        // dbg!(&command);
         let mut child = command.spawn().unwrap();
-        if let Some(output) = child.stdout.take() {
-            let lines = BufReader::new(output).lines();
-            tokio::spawn(check_progress(lines, false));
-        }
-        if let Some(output) = child.stderr.take() {
-            let lines = BufReader::new(output).lines();
-            tokio::spawn(check_progress(lines, true));
-        }
+        // if let Some(output) = child.stdout.take() {
+        //     let lines = BufReader::new(output).lines();
+        //     tokio::spawn(check_progress(lines, false));
+        // }
+        // if let Some(output) = child.stderr.take() {
+        //     let lines = BufReader::new(output).lines();
+        //     tokio::spawn(check_progress(lines, true));
+        // }
         debug!("command spawned");
         let status = child.wait().await;
         debug!("status is {:?}", &status);

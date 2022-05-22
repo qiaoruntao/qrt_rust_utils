@@ -14,4 +14,8 @@ tracing-honeycomb = "0.4.3"
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 [features]
+# disable other logging by default
+default = []
 tokio-debug = []
+# TODO: memory leak problem?
+honeycomb-logging = []

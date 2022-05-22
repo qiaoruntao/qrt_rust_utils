@@ -18,7 +18,7 @@ use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'static str>) {
-    let telemetry_layer = {
+    let telemetry_layer = if cfg!(feature="honeycomb-logging") {
         match env::var("HoneycombKey") {
             Err(e) => {
                 // no logger now
@@ -37,6 +37,8 @@ pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'st
                 Some(new_honeycomb_telemetry_layer(application_name, honeycomb_config))
             }
         }
+    } else {
+        None
     };
     let filter = EnvFilter::from_default_env()
         .add_directive(LevelFilter::INFO.into());
