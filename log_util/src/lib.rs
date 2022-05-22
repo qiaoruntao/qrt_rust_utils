@@ -12,11 +12,12 @@ use tracing_honeycomb::{
     new_honeycomb_telemetry_layer, register_dist_tracing_root, TraceId,
 };
 pub use tracing_honeycomb;
-use tracing_subscriber::{EnvFilter, registry};
+use tracing_subscriber::{EnvFilter, Layer, registry};
 use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::fmt;
 use tracing_subscriber::layer::SubscriberExt;
 
-pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'static str>) {
+pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'static str>) {
     let telemetry_layer = {
         match env::var("HoneycombKey") {
             Err(e) => {
@@ -37,41 +38,32 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
             }
         }
     };
-    let mut filter = EnvFilter::from_default_env()
-        // .add_directive("tokio=trace".parse().unwrap())
-        // .add_directive("runtime=trace".parse().unwrap())
+    let filter = EnvFilter::from_default_env()
         .add_directive(LevelFilter::INFO.into());
-    // TODO: can be replaced by rust-log env variable
-    if let Some(str) = rust_log_config {
-        for segment in str.split(',') {
-            filter = filter.add_directive(segment.parse().expect("cannot parse rust log config"));
-        }
-    }
     let registry = registry::Registry::default();
+    // TODO; need better solution
     if let Some(telemetry_layer) = telemetry_layer {
         println!("init logger with telemetry now");
         if cfg!(feature="tokio-debug") {
             println!("enabling tokio-console");
             let listen_address = env::var("TokioConsoleAddr").unwrap_or("127.0.0.1:5555".into());
             let listen_address: SocketAddr = listen_address.parse().unwrap();
-            let x = console_subscriber::ConsoleLayer::builder()
+            let console_layer = console_subscriber::ConsoleLayer::builder()
                 // set how long the console will retain data from completed tasks
-                .retention(Duration::from_secs(60))
+                .retention(Duration::from_secs(10))
                 // set the address the server is bound to
                 .server_addr(listen_address)
                 // ... other configurations ...
                 .spawn();
             let subscriber = registry
-                .with(x)
-                .with(filter)
-                .with(telemetry_layer)
-                .with(tracing_subscriber::fmt::Layer::default());
+                .with(console_layer)
+                .with(fmt::layer().with_filter(filter))
+                .with(telemetry_layer);
             tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
         } else {
             let subscriber = registry
-                .with(telemetry_layer)
-                .with(filter) // filter out low-level debug tracing (eg tokio executor)
-                .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+                .with(fmt::layer().with_filter(filter))
+                .with(telemetry_layer); // log to stdout;
             tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
         };
     } else {
@@ -80,7 +72,7 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
             println!("enabling tokio-console");
             let listen_address = env::var("TokioConsoleAddr").unwrap_or("127.0.0.1:5555".into());
             let listen_address: SocketAddr = listen_address.parse().unwrap();
-            let x = console_subscriber::ConsoleLayer::builder()
+            let console_layer = console_subscriber::ConsoleLayer::builder()
                 // set how long the console will retain data from completed tasks
                 .retention(Duration::from_secs(60))
                 // set the address the server is bound to
@@ -88,14 +80,12 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
                 // ... other configurations ...
                 .spawn();
             let subscriber = registry
-                .with(x)
-                .with(filter)
-                .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+                .with(console_layer)
+                .with(fmt::layer().with_filter(filter)); // log to stdout;
             tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
         } else {
             let subscriber = registry
-                .with(filter) // filter out low-level debug tracing (eg tokio executor)
-                .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+                .with(fmt::layer().with_filter(filter)); // log to stdout;
             tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
         };
     };
