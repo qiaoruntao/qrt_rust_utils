@@ -1,5 +1,11 @@
 use std::env;
+use std::net::SocketAddr;
+use std::time::Duration;
 
+pub use console_subscriber;
+// TODO
+// #[cfg(feature = "tokio-debug")]
+// use console_subscriber::spawn;
 pub use tracing;
 use tracing::{info, instrument, warn};
 use tracing_honeycomb::{
@@ -32,6 +38,8 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
         }
     };
     let mut filter = EnvFilter::from_default_env()
+        // .add_directive("tokio=trace".parse().unwrap())
+        // .add_directive("runtime=trace".parse().unwrap())
         .add_directive(LevelFilter::INFO.into());
     // TODO: can be replaced by rust-log env variable
     if let Some(str) = rust_log_config {
@@ -42,17 +50,54 @@ pub fn init_logger(application_name: &'static str, rust_log_config: Option<&'sta
     let registry = registry::Registry::default();
     if let Some(telemetry_layer) = telemetry_layer {
         println!("init logger with telemetry now");
-        let subscriber = registry
-            .with(telemetry_layer)
-            .with(filter) // filter out low-level debug tracing (eg tokio executor)
-            .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
-        tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        if cfg!(feature="tokio-debug") {
+            println!("enabling tokio-console");
+            let listen_address = env::var("TokioConsoleAddr").unwrap_or("127.0.0.1:5555".into());
+            let listen_address: SocketAddr = listen_address.parse().unwrap();
+            let x = console_subscriber::ConsoleLayer::builder()
+                // set how long the console will retain data from completed tasks
+                .retention(Duration::from_secs(60))
+                // set the address the server is bound to
+                .server_addr(listen_address)
+                // ... other configurations ...
+                .spawn();
+            let subscriber = registry
+                .with(x)
+                .with(filter)
+                .with(telemetry_layer)
+                .with(tracing_subscriber::fmt::Layer::default());
+            tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        } else {
+            let subscriber = registry
+                .with(telemetry_layer)
+                .with(filter) // filter out low-level debug tracing (eg tokio executor)
+                .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+            tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        };
     } else {
         println!("init logger without telemetry now");
-        let subscriber = registry
-            .with(filter) // filter out low-level debug tracing (eg tokio executor)
-            .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
-        tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        if cfg!(feature="tokio-debug") {
+            println!("enabling tokio-console");
+            let listen_address = env::var("TokioConsoleAddr").unwrap_or("127.0.0.1:5555".into());
+            let listen_address: SocketAddr = listen_address.parse().unwrap();
+            let x = console_subscriber::ConsoleLayer::builder()
+                // set how long the console will retain data from completed tasks
+                .retention(Duration::from_secs(60))
+                // set the address the server is bound to
+                .server_addr(listen_address)
+                // ... other configurations ...
+                .spawn();
+            let subscriber = registry
+                .with(x)
+                .with(filter)
+                .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+            tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        } else {
+            let subscriber = registry
+                .with(filter) // filter out low-level debug tracing (eg tokio executor)
+                .with(tracing_subscriber::fmt::Layer::default()); // log to stdout;
+            tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        };
     };
 }
 

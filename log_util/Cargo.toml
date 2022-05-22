@@ -1,6 +1,6 @@
 [package]
 name = "log_util"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,6 +9,9 @@ edition = "2021"
 libhoney-rust = "0.1.6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+console-subscriber = { version = "0" }
 tracing-honeycomb = "0.4.3"
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+[features]
+tokio-debug = []
