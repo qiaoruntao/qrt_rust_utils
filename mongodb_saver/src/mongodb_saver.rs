@@ -6,10 +6,8 @@ use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::options::{ClientOptions, InsertOneOptions, WriteConcern};
 use mongodb::results::InsertOneResult;
-use serde::Serialize;
 use serde::de::DeserializeOwned;
-
-use log_util::tracing::error;
+use serde::Serialize;
 
 pub struct MongodbSaver {
     database: Database,
@@ -55,7 +53,6 @@ impl MongodbSaver {
         let collection = self.get_collection::<Document>(collection_name);
         let find_result = collection.aggregate(pipeline, None).await;
         if let Err(e) = find_result {
-            error!("cursor find error {:?}",&e);
             return Err(e.into());
         }
         let mut cursor = find_result.unwrap();
