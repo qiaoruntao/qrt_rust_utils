@@ -21,8 +21,11 @@ impl MongodbSaver {
             database
         }
     }
+    pub fn get_collection<T: Serialize>(&self, collection_name: &str) -> Collection<T> {
+        self.database.collection(collection_name)
+    }
     pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<InsertOneResult> {
-        let collection: Collection<Document> = self.database.collection(collection_name);
+        let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_one_options = {
             let mut temp_write_concern = WriteConcern::default();
             temp_write_concern.w_timeout = Some(Duration::from_secs(3));
