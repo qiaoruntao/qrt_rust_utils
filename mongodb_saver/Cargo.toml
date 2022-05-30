@@ -10,3 +10,4 @@ serde = "1"
 mongodb = { version = "2.2.0-beta", features = ["bson-chrono-0_4"] }
 chrono = { version = "0", features = ["serde"] }
 anyhow = "1"
+futures = "0"
