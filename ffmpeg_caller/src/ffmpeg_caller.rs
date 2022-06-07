@@ -92,7 +92,7 @@ impl FfmpegCaller {
         let mut command = Command::new("ffmpeg");
         let command = command
             .stdin(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .stdout(Stdio::null())
             .kill_on_drop(true)
             .args(args)
