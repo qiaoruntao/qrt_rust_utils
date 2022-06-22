@@ -12,9 +12,18 @@ pub struct RedisHandler<T> {
 }
 
 impl<T: ToRedisArgs + Sync + Send + FromRedisValue> RedisHandler<T> {
+    pub async fn set_ex(&self, key: &str, value: T, seconds: usize) -> bool {
+        let mut connection = self.pool.get().await.unwrap();
+        connection.set_ex(key, value, seconds).await.unwrap()
+    }
     pub async fn set_value(&self, key: &str, value: T) -> bool {
         let mut connection = self.pool.get().await.unwrap();
         connection.set(key, value).await.unwrap()
+    }
+
+    pub async fn set_expire(&self, key: &str, seconds: usize) -> bool {
+        let mut connection = self.pool.get().await.unwrap();
+        connection.expire(key, seconds).await.unwrap()
     }
 
     pub async fn push_value(&self, key: &str, value: T) -> bool {
