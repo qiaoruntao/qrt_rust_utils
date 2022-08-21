@@ -65,7 +65,7 @@ mod test_redis_list {
     async fn test_list() {
         let str = env::var("redis_key").expect("redis_key not found");
         let password = env::var("redis_password").expect("redis_password not found");
-        let redis_manager = RedisManager::new(str.as_str(), Some(password.as_str())).await;
+        let redis_manager = RedisManager::new(str.as_str()).await;
         let handler: RedisHandler<String> = redis_manager.get_handler();
         let option = handler.get_value("did").await;
         dbg!(option);
