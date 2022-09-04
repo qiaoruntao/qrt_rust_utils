@@ -21,3 +21,4 @@ Cargo.lock
 out
 gen
 /config/*/default.toml
+*.sqlit
