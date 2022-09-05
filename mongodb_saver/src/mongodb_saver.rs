@@ -1,5 +1,5 @@
 use std::env;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -14,7 +14,7 @@ use serde::Serialize;
 
 pub struct MongodbSaver {
     database: Database,
-    split_conn: Option<Arc<Connection>>,
+    split_conn: Option<Arc<Mutex<Connection>>>,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl MongodbSaver {
                     ) {
                         eprintln!("{}", e);
                     }
-                    Some(Arc::new(conn))
+                    Some(Arc::new(Mutex::new(conn)))
                 }
                 Err(e) => {
                     eprintln!("{}", e);
@@ -122,7 +122,7 @@ impl MongodbSaver {
             None => {
                 return;
             }
-            Some(conn) => { conn }
+            Some(conn) => { conn.lock().unwrap() }
         };
 
         let data = RowData {
@@ -141,7 +141,7 @@ impl MongodbSaver {
         }
     }
 
-    pub fn get_sqlit_connection(&self) -> Option<&Arc<Connection>> {
+    pub fn get_sqlit_connection(&self) -> Option<&Arc<Mutex<Connection>>> {
         return self.split_conn.as_ref();
     }
 
@@ -151,7 +151,7 @@ impl MongodbSaver {
                 return;
             }
             Some(value) => {
-                value
+                value.lock().unwrap()
             }
         };
         let mut statement = match conn.prepare("SELECT id, collection_name, data FROM saved") {
