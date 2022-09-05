@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -13,7 +14,7 @@ use serde::Serialize;
 
 pub struct MongodbSaver {
     database: Database,
-    split_conn: Option<Connection>,
+    split_conn: Option<Arc<Connection>>,
 }
 
 #[derive(Debug)]
@@ -41,7 +42,7 @@ impl MongodbSaver {
                     ) {
                         eprintln!("{}", e);
                     }
-                    Some(conn)
+                    Some(Arc::new(conn))
                 }
                 Err(e) => {
                     eprintln!("{}", e);
@@ -140,7 +141,7 @@ impl MongodbSaver {
         }
     }
 
-    pub fn get_sqlit_connection(&self) -> Option<&Connection> {
+    pub fn get_sqlit_connection(&self) -> Option<&Arc<Connection>> {
         return self.split_conn.as_ref();
     }
 
