@@ -28,7 +28,7 @@ async fn check_progress<T: 'static + AsyncRead + Unpin + Send>(mut reader: Lines
 }
 
 #[cfg(windows)]
-fn system_custom_modify(command: &mut Command) {
+fn system_custom_modify(mut command: &mut Command) {
     command = command.creation_flags(CREATE_NO_WINDOW);
 }
 
