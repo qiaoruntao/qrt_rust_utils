@@ -9,6 +9,8 @@ use tracing::{debug, error, info};
 
 pub struct YoutubeDlManager {}
 
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 #[async_recursion]
 async fn check_progress<T: 'static + AsyncRead + Unpin + Send>(mut reader: Lines<BufReader<T>>, is_error: bool) -> Result<(), Box<dyn std::error::Error + Send>> {
     let result = &reader.next_line().await.unwrap();
@@ -57,6 +59,10 @@ impl YoutubeDlManager {
             command = command
                 .stderr(Stdio::null())
                 .stdout(Stdio::null());
+        }
+        // do not show console window for every youtube-dl process
+        if cfg!(windows) {
+            command = command.creation_flags(CREATE_NO_WINDOW);
         }
         let mut child = match command.spawn() {
             Ok(child) => {
