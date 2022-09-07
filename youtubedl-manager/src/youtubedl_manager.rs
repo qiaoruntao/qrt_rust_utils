@@ -27,6 +27,14 @@ async fn check_progress<T: 'static + AsyncRead + Unpin + Send>(mut reader: Lines
     }
 }
 
+#[cfg(windows)]
+fn system_custom_modify(command: &mut Command) {
+    command = command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn system_custom_modify(_command: &mut Command) {}
+
 impl YoutubeDlManager {
     // TODO: 返回值?
     pub async fn download(url: &str, path: &str) -> anyhow::Result<()> {
@@ -61,9 +69,7 @@ impl YoutubeDlManager {
                 .stdout(Stdio::null());
         }
         // do not show console window for every youtube-dl process
-        if cfg!(windows) {
-            command = command.creation_flags(CREATE_NO_WINDOW);
-        }
+        system_custom_modify(command);
         let mut child = match command.spawn() {
             Ok(child) => {
                 child
