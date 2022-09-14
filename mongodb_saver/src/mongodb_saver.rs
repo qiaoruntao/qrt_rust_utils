@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -6,6 +7,7 @@ use anyhow::anyhow;
 use futures::StreamExt;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
+use mongodb::error::{ErrorKind, WriteError, WriteFailure};
 use mongodb::options::{ClientOptions, InsertOneOptions, WriteConcern};
 use mongodb::results::InsertOneResult;
 use rusqlite::Connection;
@@ -65,10 +67,10 @@ impl MongodbSaver {
         let result = mongodb::bson::to_bson(obj)?;
         let now = chrono::Local::now();
         let document = doc! {"time":now, "data":&result};
-        self.save_collection_inner(collection_name, &document).await
+        self.save_collection_inner(collection_name, &document, true).await
     }
 
-    async fn save_collection_inner(&self, collection_name: &str, full_document: &Document) -> anyhow::Result<InsertOneResult> {
+    async fn save_collection_inner(&self, collection_name: &str, full_document: &Document, can_write_local: bool) -> anyhow::Result<InsertOneResult> {
         let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_one_options = {
             let mut temp_write_concern = WriteConcern::default();
@@ -83,7 +85,18 @@ impl MongodbSaver {
                 Ok(val)
             }
             Err(e) => {
-                self.write_local(collection_name, full_document).await;
+                let x = e.kind.borrow();
+                match x {
+                    // E11000 duplicate key error collection, ignore it
+                    // TODO: report to the caller?
+                    ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
+                        // println!("not write local");
+                    }
+                    _ => {
+                        // println!("test");
+                        self.write_local(collection_name, full_document).await;
+                    }
+                }
                 Err(e.into())
             }
         }
@@ -185,7 +198,7 @@ impl MongodbSaver {
             let collection_name = row_data.collection_name;
             let result = serde_json::from_str(data.as_str());
             let document = result.unwrap();
-            if let Ok(_) = self.save_collection_inner(collection_name.as_str(), &document).await {
+            if let Ok(_) = self.save_collection_inner(collection_name.as_str(), &document, false).await {
                 match conn.execute(
                     "delete from saved where id=?1;",
                     [row_data.id],
@@ -221,7 +234,9 @@ mod test {
 
         let saver_db_str = env::var("MongoDbSaverStr").expect("need saver db str");
         let mongodb_saver = MongodbSaver::init(saver_db_str.as_str()).await;
-        mongodb_saver.write_local("aaa", &document).await;
-        mongodb_saver.pop_local().await;
+        let result = mongodb_saver.save_collection("aaa", &document).await;
+        dbg!(&result);
+        // mongodb_saver.write_local("aaa", &document).await;
+        // mongodb_saver.pop_local().await;
     }
 }
