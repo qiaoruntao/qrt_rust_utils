@@ -6,16 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libhoney-rust = "0.1.6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 console-subscriber = { version = "0" }
-tracing-honeycomb = "0.4.3"
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 [features]
 # disable other logging by default
 default = []
 tokio-debug = []
-# TODO: memory leak problem?
-honeycomb-logging = []
