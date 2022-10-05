@@ -1,28 +1,24 @@
+use std::sync::Arc;
 use deadpool_redis::{Pool, Runtime};
 
 use crate::redis_handler::RedisHandler;
 
 pub struct RedisManager {
-    pool: Pool,
+    pool: Arc<Pool>,
 }
 
 impl RedisManager {
     pub async fn new(connection_str: &str) -> RedisManager {
         let config = deadpool_redis::Config::from_url(connection_str);
         let pool = config.create_pool(Some(Runtime::Tokio1)).unwrap();
-        // if let Some(auth_str) = auth {
-        //     let mut connection = pool.get().await.unwrap();
-        //     deadpool_redis::redis::cmd("AUTH").arg(auth_str).query_async::<_, ()>(&mut connection).await.unwrap();
-        // }
         RedisManager {
-            pool
+            pool: Arc::new(pool)
         }
     }
 
     pub fn get_handler<T>(&self) -> RedisHandler<T> {
-        let pool = self.pool.clone();
         RedisHandler {
-            pool,
+            pool: self.pool.clone(),
             phantom: Default::default(),
         }
     }
@@ -40,7 +36,6 @@ mod test {
     async fn test_redis() {
         init_logger("test", None);
         let str = env::var("redis_key").expect("redis_key not found");
-        let password = env::var("redis_password").expect("redis_password not found");
         let manager = RedisManager::new(str.as_str()).await;
         let handler = manager.get_handler();
         let x1 = handler.set_value("aaa", 111).await;

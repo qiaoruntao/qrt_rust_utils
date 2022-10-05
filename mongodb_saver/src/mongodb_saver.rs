@@ -14,6 +14,8 @@ use rusqlite::Connection;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use log_util::tracing::error;
+
 pub struct MongodbSaver {
     database: Database,
     split_conn: Option<Arc<Mutex<Connection>>>,
@@ -42,12 +44,12 @@ impl MongodbSaver {
                         "CREATE TABLE saved (id INTEGER PRIMARY KEY AUTOINCREMENT, collection_name  TEXT NOT NULL, data  TEXT NOT NULL)",
                         (), // empty list of parameters.
                     ) {
-                        eprintln!("{}", e);
+                        error!("{}", e);
                     }
                     Some(Arc::new(Mutex::new(conn)))
                 }
                 Err(e) => {
-                    eprintln!("{}", e);
+                    error!("{}", e);
                     None
                 }
             }
@@ -94,7 +96,9 @@ impl MongodbSaver {
                     }
                     _ => {
                         // println!("test");
-                        self.write_local(collection_name, full_document).await;
+                        if can_write_local {
+                            self.write_local(collection_name, full_document).await;
+                        }
                     }
                 }
                 Err(e.into())
@@ -149,7 +153,7 @@ impl MongodbSaver {
         ) {
             Ok(_) => {}
             Err(e) => {
-                eprintln!("{}", e);
+                error!("{}", e);
             }
         }
     }
@@ -172,7 +176,7 @@ impl MongodbSaver {
                 cursor
             }
             Err(e) => {
-                eprintln!("{}", e);
+                error!("{}", e);
                 return;
             }
         };
@@ -189,7 +193,7 @@ impl MongodbSaver {
             .filter_map(|value| match value {
                 Ok(v) => { Some(v) }
                 Err(e) => {
-                    eprintln!("{}", e);
+                    error!("{}", e);
                     None
                 }
             });
@@ -205,7 +209,7 @@ impl MongodbSaver {
                 ) {
                     Ok(_) => {}
                     Err(e) => {
-                        eprintln!("{}", e);
+                        error!("{}", e);
                     }
                 }
             }
@@ -215,16 +219,17 @@ impl MongodbSaver {
 
 #[cfg(test)]
 mod test {
+    use std::env;
+
+    use mongodb::bson::doc;
     use serde::Serialize;
+
+    use crate::mongodb_saver::MongodbSaver;
 
     #[derive(Serialize)]
     struct TestData {
         num: i32,
     }
-
-    use std::env;
-    use mongodb::bson::doc;
-    use crate::mongodb_saver::MongodbSaver;
 
     #[tokio::test]
     async fn test_sqlit() {

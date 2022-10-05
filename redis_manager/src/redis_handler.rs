@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 use deadpool_redis::Pool;
 use deadpool_redis::redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
@@ -7,7 +8,7 @@ use deadpool_redis::redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use log_util::tracing::error;
 
 pub struct RedisHandler<T> {
-    pub pool: Pool,
+    pub pool: Arc<Pool>,
     pub(crate) phantom: PhantomData<T>,
 }
 
@@ -64,7 +65,6 @@ mod test_redis_list {
     #[tokio::test]
     async fn test_list() {
         let str = env::var("redis_key").expect("redis_key not found");
-        let password = env::var("redis_password").expect("redis_password not found");
         let redis_manager = RedisManager::new(str.as_str()).await;
         let handler: RedisHandler<String> = redis_manager.get_handler();
         let option = handler.get_value("did").await;
