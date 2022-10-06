@@ -16,10 +16,9 @@ impl RedisManager {
         }
     }
 
-    pub fn get_handler<T>(&self) -> RedisHandler<T> {
+    pub fn get_handler(&self) -> RedisHandler {
         RedisHandler {
             pool: self.pool.clone(),
-            phantom: Default::default(),
         }
     }
 }
