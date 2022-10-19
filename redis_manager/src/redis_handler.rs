@@ -19,7 +19,7 @@ impl RedisHandler {
         connection.set(key, value).await.unwrap()
     }
 
-    pub async fn set_expire<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, seconds: usize) -> bool {
+    pub async fn set_expire(&self, key: &str, seconds: usize) -> bool {
         let mut connection = self.pool.get().await.unwrap();
         connection.expire(key, seconds).await.unwrap()
     }
@@ -70,6 +70,8 @@ mod test_redis_list {
         let option = handler.get_value::<String, _>("did_").await;
         dbg!(option);
         let option = handler.fetch_list::<i64>("BanList").await;
+        dbg!(option);
+        let option = handler.get_value::<Vec<Option<String>>, _>(&["did", "did", "did", "did2"]).await;
         dbg!(option);
     }
 }
