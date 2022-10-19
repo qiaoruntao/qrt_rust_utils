@@ -8,8 +8,8 @@ use futures::StreamExt;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::error::{ErrorKind, WriteError, WriteFailure};
-use mongodb::options::{ClientOptions, InsertOneOptions, WriteConcern};
-use mongodb::results::InsertOneResult;
+use mongodb::options::{Acknowledgment, ClientOptions, InsertManyOptions, InsertOneOptions, WriteConcern};
+use mongodb::results::{InsertManyResult, InsertOneResult};
 use rusqlite::Connection;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -71,6 +71,51 @@ impl MongodbSaver {
         let document = doc! {"time":now, "data":&result};
         self.save_collection_inner(collection_name, &document, true).await
     }
+    pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<InsertManyResult> {
+        let now = chrono::Local::now();
+        let documents = objs.iter()
+            .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
+            .collect::<Vec<_>>();
+
+        self.save_collection_inner_batch(collection_name, &documents, true).await
+    }
+
+    async fn save_collection_inner_batch(&self, collection_name: &str, full_document: &[Document], can_write_local: bool) -> anyhow::Result<InsertManyResult> {
+        let collection: Collection<Document> = self.get_collection(collection_name);
+        let insert_options = {
+            let mut temp_write_concern = WriteConcern::default();
+            temp_write_concern.w_timeout = Some(Duration::from_secs(3));
+
+            let mut temp = InsertManyOptions::default();
+            temp.write_concern = Option::from(temp_write_concern);
+            temp.ordered = Some(false);
+            temp
+        };
+        match collection.insert_many(full_document, Some(insert_options)).await {
+            Ok(val) => {
+                Ok(val)
+            }
+            Err(e) => {
+                let x = e.kind.borrow();
+                match x {
+                    // E11000 duplicate key error collection, ignore it
+                    // TODO: report to the caller?
+                    ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
+                        // println!("not write local");
+                    }
+                    _ => {
+                        // println!("test");
+                        if can_write_local {
+                            for document in full_document {
+                                self.write_local(collection_name, document).await;
+                            }
+                        }
+                    }
+                }
+                Err(e.into())
+            }
+        }
+    }
 
     async fn save_collection_inner(&self, collection_name: &str, full_document: &Document, can_write_local: bool) -> anyhow::Result<InsertOneResult> {
         let collection: Collection<Document> = self.get_collection(collection_name);
@@ -114,7 +159,7 @@ impl MongodbSaver {
         }
         let mut cursor = find_result.unwrap();
         let next = cursor.next().await;
-        return match next {
+        match next {
             None => {
                 Err(anyhow!("not found"))
             }
@@ -131,7 +176,7 @@ impl MongodbSaver {
                     }
                 }
             }
-        };
+        }
     }
 
     pub async fn write_local(&self, collection_name: &str, document: &Document) {
@@ -202,7 +247,7 @@ impl MongodbSaver {
             let collection_name = row_data.collection_name;
             let result = serde_json::from_str(data.as_str());
             let document = result.unwrap();
-            if let Ok(_) = self.save_collection_inner(collection_name.as_str(), &document, false).await {
+            if (self.save_collection_inner(collection_name.as_str(), &document, false).await).is_ok() {
                 match conn.execute(
                     "delete from saved where id=?1;",
                     [row_data.id],
