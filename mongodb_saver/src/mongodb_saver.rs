@@ -8,7 +8,7 @@ use futures::StreamExt;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::error::{ErrorKind, WriteError, WriteFailure};
-use mongodb::options::{Acknowledgment, ClientOptions, InsertManyOptions, InsertOneOptions, WriteConcern};
+use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, WriteConcern};
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use rusqlite::Connection;
 use serde::de::DeserializeOwned;
@@ -65,13 +65,13 @@ impl MongodbSaver {
         self.database.collection(collection_name)
     }
 
-    pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<InsertOneResult> {
+    pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<Option<InsertOneResult>> {
         let result = mongodb::bson::to_bson(obj)?;
         let now = chrono::Local::now();
         let document = doc! {"time":now, "data":&result};
         self.save_collection_inner(collection_name, &document, true).await
     }
-    pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<InsertManyResult> {
+    pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<Option<InsertManyResult>> {
         let now = chrono::Local::now();
         let documents = objs.iter()
             .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
@@ -80,7 +80,7 @@ impl MongodbSaver {
         self.save_collection_inner_batch(collection_name, &documents, true).await
     }
 
-    async fn save_collection_inner_batch(&self, collection_name: &str, full_document: &[Document], can_write_local: bool) -> anyhow::Result<InsertManyResult> {
+    async fn save_collection_inner_batch(&self, collection_name: &str, full_document: &[Document], can_write_local: bool) -> anyhow::Result<Option<InsertManyResult>> {
         let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_options = {
             let mut temp_write_concern = WriteConcern::default();
@@ -93,7 +93,7 @@ impl MongodbSaver {
         };
         match collection.insert_many(full_document, Some(insert_options)).await {
             Ok(val) => {
-                Ok(val)
+                Ok(Some(val))
             }
             Err(e) => {
                 let x = e.kind.borrow();
@@ -101,6 +101,7 @@ impl MongodbSaver {
                     // E11000 duplicate key error collection, ignore it
                     // TODO: report to the caller?
                     ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
+                        Ok(None)
                         // println!("not write local");
                     }
                     _ => {
@@ -110,14 +111,14 @@ impl MongodbSaver {
                                 self.write_local(collection_name, document).await;
                             }
                         }
+                        Err(e.into())
                     }
                 }
-                Err(e.into())
             }
         }
     }
 
-    async fn save_collection_inner(&self, collection_name: &str, full_document: &Document, can_write_local: bool) -> anyhow::Result<InsertOneResult> {
+    async fn save_collection_inner(&self, collection_name: &str, full_document: &Document, can_write_local: bool) -> anyhow::Result<Option<InsertOneResult>> {
         let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_one_options = {
             let mut temp_write_concern = WriteConcern::default();
@@ -129,7 +130,7 @@ impl MongodbSaver {
         };
         match collection.insert_one(full_document, Some(insert_one_options)).await {
             Ok(val) => {
-                Ok(val)
+                Ok(Some(val))
             }
             Err(e) => {
                 let x = e.kind.borrow();
@@ -138,15 +139,16 @@ impl MongodbSaver {
                     // TODO: report to the caller?
                     ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
                         // println!("not write local");
+                        Ok(None)
                     }
                     _ => {
                         // println!("test");
                         if can_write_local {
                             self.write_local(collection_name, full_document).await;
                         }
+                        Err(e.into())
                     }
                 }
-                Err(e.into())
             }
         }
     }
