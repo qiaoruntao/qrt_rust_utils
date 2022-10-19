@@ -29,7 +29,7 @@ impl RedisHandler {
         connection.rpush(key, value).await.unwrap()
     }
 
-    pub async fn get_value<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str) -> Option<T> {
+    pub async fn get_value<T: ToRedisArgs + Sync + Send + FromRedisValue, K: ToRedisArgs + Send + Sync>(&self, key: K) -> Option<T> {
         let mut connection = self.pool.get().await.unwrap();
         match connection.get(key).await {
             Ok(v) => v,
@@ -63,11 +63,11 @@ mod test_redis_list {
         let str = env::var("redis_key").expect("redis_key not found");
         let redis_manager = RedisManager::new(str.as_str()).await;
         let handler = redis_manager.get_handler();
-        let option = handler.get_value::<String>("did").await;
+        let option = handler.get_value::<String, _>("did").await;
         dbg!(option);
         let option = handler.set_value::<String>("did", "aaa".into()).await;
         dbg!(option);
-        let option = handler.get_value::<String>("did_").await;
+        let option = handler.get_value::<String, _>("did_").await;
         dbg!(option);
         let option = handler.fetch_list::<i64>("BanList").await;
         dbg!(option);
