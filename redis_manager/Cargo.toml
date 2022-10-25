@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 deadpool-redis = "0"
 log_util = { path = "../log_util" }
+futures = "0"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
