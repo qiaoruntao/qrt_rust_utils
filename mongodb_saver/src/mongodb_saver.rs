@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::anyhow;
+use chrono::{DateTime, Local};
 use futures::StreamExt;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
@@ -71,6 +72,13 @@ impl MongodbSaver {
         let document = doc! {"time":now, "data":&result};
         self.save_collection_inner(collection_name, &document, true).await
     }
+
+    pub async fn save_collection_with_time<T: Serialize>(&self, collection_name: &str, obj: &T, now: DateTime<Local>) -> anyhow::Result<Option<InsertOneResult>> {
+        let result = mongodb::bson::to_bson(obj)?;
+        let document = doc! {"time":now, "data":&result};
+        self.save_collection_inner(collection_name, &document, true).await
+    }
+
     pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<Option<InsertManyResult>> {
         let now = chrono::Local::now();
         let documents = objs.iter()
