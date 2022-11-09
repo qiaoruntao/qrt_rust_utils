@@ -8,7 +8,6 @@ use log_util::tracing::{error, warn};
 
 pub struct RedisHandler {
     pub pool: Arc<Pool>,
-    pub pubsub: Arc<Mutex<Option<redis::aio::PubSub>>>,
 }
 
 impl RedisHandler {
@@ -53,51 +52,60 @@ impl RedisHandler {
         }
     }
 
-    pub async fn get_pubsub(&self) -> Arc<Mutex<Option<PubSub>>> {
-        let mut guard = self.pubsub.lock().unwrap();
-        if guard.is_none() {
-            let obj = deadpool_redis::Connection::take(self.pool.get().await.unwrap());
-            let pubsub = obj.into_pubsub();
-            *guard = Some(pubsub);
+    pub async fn fetch_map<T: ToRedisArgs + Sync + Send + FromRedisValue, K: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str) -> Option<Vec<(T, K)>> {
+        let mut connection = self.pool.get().await.unwrap();
+        match connection.hgetall(key).await {
+            Ok(v) => v,
+            Err(e) => {
+                error!("{}",&e);
+                None
+            }
         }
-        self.pubsub.clone()
     }
 
-    pub async fn p_subscribe(&self, pattern: &str) {
-        let x1 = self.get_pubsub().await;
-        let mut mutex_guard = x1.lock().unwrap();
-        if let Some(pubsub) = mutex_guard.as_mut() {
-            pubsub.psubscribe(pattern).await.unwrap();
-            // pubsub.psubscribe("__key*__:*").await.unwrap();
-        } else {
-            warn!("failed to fetch pubsub");
+    pub async fn fetch_hkey<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, field: &str) -> Option<T> {
+        let mut connection = self.pool.get().await.unwrap();
+        match connection.hget(key, field).await {
+            Ok(v) => v,
+            Err(e) => {
+                error!("{}",&e);
+                None
+            }
         }
-        //
-        // let x = pubsub.on_message();
-        // tokio::spawn(async move {
-        //     futures::StreamExt::for_each(x.take(1), |msg| {
-        //         async move {
-        //             let channel = msg.get_channel_name();
-        //             let str: String = msg.get_payload().unwrap();
-        //             println!("{}={}", channel, str);
-        //         }
-        //     }).await;
-        // });
-        //
-        //
-        // futures::StreamExt::for_each(pubsub.on_message().take(1), |msg| {
-        //     async move {
-        //         let channel = msg.get_channel_name();
-        //         let str: String = msg.get_payload().unwrap();
-        //         println!("{}={}", channel, str);
-        //     }
-        // }).await;
+    }
+    pub async fn del_hkey(&self, key: &str, field: &str) -> Option<i64> {
+        let mut connection = self.pool.get().await.unwrap();
+        match connection.hdel(key, field).await {
+            Ok(v) => v,
+            Err(e) => {
+                error!("{}",&e);
+                None
+            }
+        }
+    }
+
+    pub async fn get_pubsub(&self) -> Option<PubSub> {
+        // TODO: is this necessary?
+        // self.pool.resize(self.pool.status().max_size + 1);
+        match self.pool.get().await {
+            Ok(connection) => {
+                let deadpool_connection = deadpool_redis::Connection::take(connection);
+                Some(deadpool_connection.into_pubsub())
+            }
+            Err(e) => {
+                error!("failed to get pubsub {}",e);
+                None
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod test_redis_list {
     use std::env;
+    use std::time::Duration;
+
+    use futures::StreamExt;
 
     use crate::redis_manager::RedisManager;
 
@@ -116,13 +124,43 @@ mod test_redis_list {
         dbg!(option);
         let option = handler.get_value::<Vec<Option<String>>, _>(&["did", "did", "did", "did2"]).await;
         dbg!(option);
+        let option: Option<Vec<(i64, i64)>> = handler.fetch_map("Broadcasting").await;
+        dbg!(option);
+    }
+
+    #[tokio::test]
+    async fn test_pubsub_creation() {
+        let str = env::var("redis_key").expect("redis_key not found");
+        let redis_manager = RedisManager::new(str.as_str()).await;
+        let redis_handler = redis_manager.get_handler();
+        for _ in 0..100 {
+            let mut pub_sub = redis_handler.get_pubsub().await.unwrap();
+            pub_sub.psubscribe("__key*__:Broadcasting").await.expect("failed to listen to pubsub");
+            // drop(pub_sub);
+        }
     }
 
     #[tokio::test]
     async fn test_pubsub() {
         let str = env::var("redis_key").expect("redis_key not found");
         let redis_manager = RedisManager::new(str.as_str()).await;
-        let handler = redis_manager.get_handler();
-        // handler.subscribe().await;
+        let redis_handler = redis_manager.get_handler();
+        let mut pubsub = match redis_handler.get_pubsub().await {
+            None => {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                return;
+            }
+            Some(v) => { v }
+        };
+        pubsub.psubscribe("__key*__:Broadcasting").await.expect("failed to listen to pubsub");
+        StreamExt::for_each(pubsub.on_message().take(5), |msg| {
+            async move {
+                dbg!(&msg);
+                // TODO:
+                // let channel = msg.get_channel_name();
+                // let str: String = msg.get_payload().unwrap();
+                // println!("{}={}", channel, str);
+            }
+        }).await;
     }
 }
