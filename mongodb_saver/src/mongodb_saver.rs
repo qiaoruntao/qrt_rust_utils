@@ -1,11 +1,7 @@
-use std::borrow::Borrow;
-use std::env;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
 use futures::StreamExt;
+use log_util::tracing::error;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::error::{ErrorKind, WriteError, WriteFailure};
@@ -14,8 +10,10 @@ use mongodb::results::{InsertManyResult, InsertOneResult};
 use rusqlite::Connection;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
-use log_util::tracing::error;
+use std::borrow::Borrow;
+use std::env;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 pub struct MongodbSaver {
     database: Database,
@@ -31,7 +29,11 @@ struct RowData {
 
 impl MongodbSaver {
     pub async fn init(connection_str: &str) -> Self {
-        let client_options = ClientOptions::parse(connection_str).await.unwrap();
+        let mut client_options = if cfg!(windows) && connection_str.contains("+srv") {
+            ClientOptions::parse_with_resolver_config(connection_str, ResolverConfig::quad9()).await.unwrap()
+        } else {
+            ClientOptions::parse(connection_str).await.unwrap()
+        };
         let target_database = client_options.default_database.clone().unwrap();
         // Get a handle to the deployment.
         let client = Client::with_options(client_options).unwrap();
@@ -274,10 +276,9 @@ impl MongodbSaver {
 
 #[cfg(test)]
 mod test {
-    use std::env;
-
     use mongodb::bson::doc;
     use serde::Serialize;
+    use std::env;
 
     use crate::mongodb_saver::MongodbSaver;
 
