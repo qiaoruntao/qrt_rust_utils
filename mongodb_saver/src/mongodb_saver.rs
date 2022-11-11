@@ -5,7 +5,7 @@ use log_util::tracing::error;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::error::{ErrorKind, WriteError, WriteFailure};
-use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, WriteConcern};
+use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, ResolverConfig, WriteConcern};
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use rusqlite::Connection;
 use serde::de::DeserializeOwned;
