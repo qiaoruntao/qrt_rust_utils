@@ -7,5 +7,5 @@ edition = "2018"
 
 [workspace]
 members = ["qrt_rust_macros", "tg_notification", "log_util"
-    , "downloader", "sanitizer", "ffmpeg_caller", "request_utils", "file_utils", "qrt_rust_macros", "mongodb_saver", "youtubedl-manager", "redis_manager", "video_downloader"]
+    , "downloader", "sanitizer", "ffmpeg_caller", "request_utils", "file_utils", "qrt_rust_macros", "mongodb_saver", "youtubedl-manager", "redis_manager", "video_downloader", "timed_counter"]
 exclude = []
