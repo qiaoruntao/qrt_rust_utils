@@ -1,23 +1,29 @@
+use std::borrow::Borrow;
+use std::env;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::SeqCst;
+use std::time::Duration;
+
 use anyhow::anyhow;
 use chrono::{DateTime, Local};
+use deadpool_sqlite::{Config, Pool, Runtime};
 use futures::StreamExt;
-use log_util::tracing::error;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
 use mongodb::error::{ErrorKind, WriteError, WriteFailure};
 use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, ResolverConfig, WriteConcern};
 use mongodb::results::{InsertManyResult, InsertOneResult};
-use rusqlite::Connection;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::borrow::Borrow;
-use std::env;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+
+use log_util::tracing::{error, info};
 
 pub struct MongodbSaver {
     database: Database,
-    split_conn: Option<Arc<Mutex<Connection>>>,
+    sqlite_pool: Pool,
+    dirty: Arc<AtomicBool>,
+    cleaning: Arc<AtomicBool>,
 }
 
 #[derive(Debug)]
@@ -29,7 +35,7 @@ struct RowData {
 
 impl MongodbSaver {
     pub async fn init(connection_str: &str) -> Self {
-        let mut client_options = if cfg!(windows) && connection_str.contains("+srv") {
+        let client_options = if cfg!(windows) && connection_str.contains("+srv") {
             ClientOptions::parse_with_resolver_config(connection_str, ResolverConfig::quad9()).await.unwrap()
         } else {
             ClientOptions::parse(connection_str).await.unwrap()
@@ -39,28 +45,28 @@ impl MongodbSaver {
         let client = Client::with_options(client_options).unwrap();
         let database = client.database(target_database.as_str());
         // init split database
-        let sqlit_path = env::var("SqlitPath").unwrap_or("./sqlit_temp.sqlit".into());
-        let split_conn = {
-            match Connection::open(&sqlit_path) {
-                Ok(conn) => {
-                    if let Err(e) = conn.execute(
-                        "CREATE TABLE saved (id INTEGER PRIMARY KEY AUTOINCREMENT, collection_name  TEXT NOT NULL, data  TEXT NOT NULL)",
-                        (), // empty list of parameters.
-                    ) {
-                        error!("{}", e);
-                    }
-                    Some(Arc::new(Mutex::new(conn)))
-                }
-                Err(e) => {
-                    error!("{}", e);
-                    None
-                }
+
+        let sqlite_path = env::var("SqlitePath").unwrap_or("./sqlite_temp.sqlite".into());
+        let sqlite_config = Config::new(&sqlite_path);
+        let pool = sqlite_config.create_pool(Runtime::Tokio1).unwrap();
+        let conn = pool.get().await.unwrap();
+        if let Err(e) = conn.interact(|conn| {
+            if let Err(e) = conn.execute(
+                "CREATE TABLE saved (id INTEGER PRIMARY KEY AUTOINCREMENT, collection_name  TEXT NOT NULL, data  TEXT NOT NULL)",
+                (), // empty list of parameters.
+            ) {
+                error!("{}", e);
             }
-        };
+        }).await {
+            error!("failed to create table {}",e);
+        }
 
         MongodbSaver {
             database,
-            split_conn,
+            sqlite_pool: pool,
+            // force to check is dirty
+            dirty: Arc::new(AtomicBool::new(true)),
+            cleaning: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -70,19 +76,29 @@ impl MongodbSaver {
 
     pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<Option<InsertOneResult>> {
         let result = mongodb::bson::to_bson(obj)?;
-        let now = chrono::Local::now();
+        let now = Local::now();
         let document = doc! {"time":now, "data":&result};
-        self.save_collection_inner(collection_name, &document, true).await
+        let result = MongodbSaver::save_collection_inner(self.get_collection(collection_name), &document).await;
+        if result.is_ok() {
+            // mongodb connection ok, check if we need to clean sqlite database
+            self.clean_local();
+        } else {
+            // this function is called outside of this module, can save to local now
+            if MongodbSaver::write_local(self.sqlite_pool.clone(), collection_name, &document).await {
+                self.dirty.store(true, SeqCst);
+            }
+        }
+        result
     }
 
     pub async fn save_collection_with_time<T: Serialize>(&self, collection_name: &str, obj: &T, now: DateTime<Local>) -> anyhow::Result<Option<InsertOneResult>> {
         let result = mongodb::bson::to_bson(obj)?;
         let document = doc! {"time":now, "data":&result};
-        self.save_collection_inner(collection_name, &document, true).await
+        MongodbSaver::save_collection_inner(self.get_collection(collection_name), &document).await
     }
 
     pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<Option<InsertManyResult>> {
-        let now = chrono::Local::now();
+        let now = Local::now();
         let documents = objs.iter()
             .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
             .collect::<Vec<_>>();
@@ -118,7 +134,7 @@ impl MongodbSaver {
                         // println!("test");
                         if can_write_local {
                             for document in full_document {
-                                self.write_local(collection_name, document).await;
+                                MongodbSaver::write_local(self.sqlite_pool.clone(), collection_name, document).await;
                             }
                         }
                         Err(e.into())
@@ -128,8 +144,7 @@ impl MongodbSaver {
         }
     }
 
-    async fn save_collection_inner(&self, collection_name: &str, full_document: &Document, can_write_local: bool) -> anyhow::Result<Option<InsertOneResult>> {
-        let collection: Collection<Document> = self.get_collection(collection_name);
+    async fn save_collection_inner(collection: Collection<Document>, full_document: &Document) -> anyhow::Result<Option<InsertOneResult>> {
         let insert_one_options = {
             let mut temp_write_concern = WriteConcern::default();
             temp_write_concern.w_timeout = Some(Duration::from_secs(3));
@@ -148,14 +163,9 @@ impl MongodbSaver {
                     // E11000 duplicate key error collection, ignore it
                     // TODO: report to the caller?
                     ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
-                        // println!("not write local");
                         Ok(None)
                     }
                     _ => {
-                        // println!("test");
-                        if can_write_local {
-                            self.write_local(collection_name, full_document).await;
-                        }
                         Err(e.into())
                     }
                 }
@@ -191,83 +201,143 @@ impl MongodbSaver {
         }
     }
 
-    pub async fn write_local(&self, collection_name: &str, document: &Document) {
-        let conn = match self.get_sqlit_connection() {
-            None => {
-                return;
-            }
-            Some(conn) => { conn.lock().unwrap() }
-        };
+    pub async fn write_local(arc: Pool, collection_name: &str, document: &Document) -> bool {
+        let conn = arc.get().await.unwrap();
 
         let data = RowData {
             id: 0,
             collection_name: collection_name.to_string(),
             data: serde_json::to_string(&document).unwrap(),
         };
-        match conn.execute(
-            "INSERT INTO saved (collection_name, data) VALUES (?1, ?2)",
-            (&data.collection_name, &data.data),
-        ) {
-            Ok(_) => {}
-            Err(e) => {
-                error!("{}", e);
-            }
-        }
-    }
-
-    pub fn get_sqlit_connection(&self) -> Option<&Arc<Mutex<Connection>>> {
-        return self.split_conn.as_ref();
-    }
-
-    pub async fn pop_local(&self) {
-        let conn = match self.get_sqlit_connection() {
-            None => {
-                return;
-            }
-            Some(value) => {
-                value.lock().unwrap()
-            }
-        };
-        let mut statement = match conn.prepare("SELECT id, collection_name, data FROM saved") {
-            Ok(cursor) => {
-                cursor
-            }
-            Err(e) => {
-                error!("{}", e);
-                return;
-            }
-        };
-
-        let cursor = statement
-            .query_map([], |row| {
-                Ok(RowData {
-                    id: row.get(0)?,
-                    collection_name: row.get(1)?,
-                    data: row.get(2)?,
-                })
-            })
-            .unwrap()
-            .filter_map(|value| match value {
-                Ok(v) => { Some(v) }
+        conn.interact(move |conn| {
+            match conn.execute(
+                "INSERT INTO saved (collection_name, data) VALUES (?1, ?2)",
+                (&data.collection_name, &data.data),
+            ) {
+                Ok(_) => {
+                    true
+                }
                 Err(e) => {
                     error!("{}", e);
+                    false
+                }
+            }
+        }).await.unwrap()
+    }
+
+    async fn get_sqlite_cnt(pool: Pool) -> Option<u64> {
+        let conn = pool.get().await.unwrap();
+        conn.interact(|conn| {
+            match conn.query_row_and_then(
+                "SELECT count(id) FROM saved",
+                [],
+                |row| row.get(0),
+            ) {
+                Err(e) => {
+                    error!("{}",e);
                     None
                 }
-            });
-        for row_data in cursor {
+                Ok(cnt) => {
+                    Some(cnt)
+                }
+            }
+        }).await.unwrap()
+    }
+
+    // do some necessary clean up when mongodb connection is restored
+    pub fn clean_local(&self) {
+        if !self.dirty.load(SeqCst) {
+            // not dirty
+            return;
+        }
+        if self.cleaning.load(SeqCst) {
+            // still cleaning
+            return;
+        }
+
+        let database = self.database.clone();
+        let cleaning = self.cleaning.clone();
+        let dirty = self.dirty.clone();
+        let pool = self.sqlite_pool.clone();
+
+        tokio::spawn(async move {
+            cleaning.store(true, SeqCst);
+            let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await.unwrap_or(0);
+            for _ in 0..=(total_cnt / 100) {
+                MongodbSaver::pop_local(pool.clone(), database.clone()).await;
+                let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await;
+                if let Some(0) = total_cnt {
+                    info!("dirty cleaned up");
+                    dirty.store(false, SeqCst);
+                    break;
+                }
+            }
+            cleaning.store(false, SeqCst);
+        });
+    }
+
+    pub async fn pop_local(pool: Pool, database: Database) {
+        // info!("start to pop local");
+        let conn = pool.get().await.unwrap();
+        let batch_data = conn.interact(|conn| {
+            let mut statement = match conn.prepare("SELECT id, collection_name, data FROM saved limit 100") {
+                Ok(cursor) => {
+                    cursor
+                }
+                Err(e) => {
+                    error!("{}", e);
+                    return vec![];
+                }
+            };
+            let cursor = statement
+                .query_map([], |row| {
+                    Ok(RowData {
+                        id: row.get(0)?,
+                        collection_name: row.get(1)?,
+                        data: row.get(2)?,
+                    })
+                })
+                .unwrap()
+                .filter_map(|value| match value {
+                    Ok(v) => { Some(v) }
+                    Err(e) => {
+                        error!("{}", e);
+                        None
+                    }
+                }).collect::<Vec<_>>();
+            cursor
+        }).await.unwrap();
+        info!("start to save {} records into mongodb",  batch_data.len());
+        for row_data in batch_data.into_iter() {
             let data = row_data.data;
             let collection_name = row_data.collection_name;
             let result = serde_json::from_str(data.as_str());
             let document = result.unwrap();
-            if (self.save_collection_inner(collection_name.as_str(), &document, false).await).is_ok() {
-                match conn.execute(
-                    "delete from saved where id=?1;",
-                    [row_data.id],
-                ) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        error!("{}", e);
+            let collection = database.collection(collection_name.as_str());
+            let mongodb_write_result = MongodbSaver::save_collection_inner(collection, &document).await;
+            match mongodb_write_result {
+                Ok(_) => {
+                    // remove sqlite record
+                    if let Err(e) = conn.interact(move |conn| {
+                        match conn.execute(
+                            "delete from saved where id=?1;",
+                            [row_data.id],
+                        ) {
+                            Ok(_) => {
+                                // info!("deleted");
+                            }
+                            Err(e) => {
+                                error!("{}", e);
+                            }
+                        }
+                    }).await {
+                        error!("{}",e);
                     }
+                }
+                Err(e) => {
+                    // something went wrong
+                    error!("failed to save into mongodb {}",e);
+                    break;
                 }
             }
         }
@@ -276,9 +346,11 @@ impl MongodbSaver {
 
 #[cfg(test)]
 mod test {
+    use std::env;
+    use std::time::Duration;
+
     use mongodb::bson::doc;
     use serde::Serialize;
-    use std::env;
 
     use crate::mongodb_saver::MongodbSaver;
 
@@ -288,7 +360,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_sqlit() {
+    async fn test_sqlite() {
         let result = mongodb::bson::to_bson(&TestData { num: 1 }).unwrap();
         let now = chrono::Local::now();
         let document = doc! {"time":now, "data":&result};
@@ -297,6 +369,7 @@ mod test {
         let mongodb_saver = MongodbSaver::init(saver_db_str.as_str()).await;
         let result = mongodb_saver.save_collection("aaa", &document).await;
         dbg!(&result);
+        tokio::time::sleep(Duration::from_secs(3600)).await;
         // mongodb_saver.write_local("aaa", &document).await;
         // mongodb_saver.pop_local().await;
     }

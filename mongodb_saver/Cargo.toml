@@ -11,8 +11,10 @@ mongodb = { version = "2", features = ["bson-chrono-0_4"] }
 chrono = { version = "0", features = ["serde"] }
 anyhow = "1"
 futures = "0"
-rusqlite = { version = "0.28", features = ["bundled"] }
+rusqlite = { version = "0", features = ["bundled"] }
 serde_json = "1"
 log_util = { path = "../log_util" }
+tokio = { version = "1" }
+deadpool-sqlite = "0"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
