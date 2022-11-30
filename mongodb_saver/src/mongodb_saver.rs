@@ -254,6 +254,7 @@ impl MongodbSaver {
             // still cleaning
             return;
         }
+        self.cleaning.store(true, SeqCst);
 
         let database = self.database.clone();
         let cleaning = self.cleaning.clone();
@@ -261,7 +262,6 @@ impl MongodbSaver {
         let pool = self.sqlite_pool.clone();
 
         tokio::spawn(async move {
-            cleaning.store(true, SeqCst);
             let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await.unwrap_or(0);
             for _ in 0..=(total_cnt / 100) {
                 MongodbSaver::pop_local(pool.clone(), database.clone()).await;
