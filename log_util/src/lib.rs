@@ -3,6 +3,11 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 pub use console_subscriber;
+use opentelemetry::{KeyValue, trace::Tracer};
+use opentelemetry::sdk::{Resource, trace};
+use opentelemetry::sdk::trace::Sampler;
+use opentelemetry_otlp::{ExportConfig, Protocol, WithExportConfig};
+use tonic::metadata::*;
 // TODO
 // #[cfg(feature = "tokio-debug")]
 // use console_subscriber::spawn;
@@ -11,14 +16,40 @@ use tracing::{info, instrument, warn};
 use tracing_subscriber::{EnvFilter, Layer, registry};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::time;
 use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(_application_name: &'static str, _rust_log_config: Option<&'static str>) {
-
     let filter = EnvFilter::from_default_env()
         .add_directive(LevelFilter::INFO.into());
     println!("filter={}", &filter);
     let registry = registry::Registry::default();
+    let mut map = MetadataMap::with_capacity(3);
+
+    map.insert("api-key", "".parse().unwrap());
+    let tracer = opentelemetry_otlp::new_pipeline()
+        .tracing()
+        .with_exporter(
+            opentelemetry_otlp::new_exporter()
+                .tonic()
+                .with_endpoint("https://otlp.nr-data.net")
+                .with_protocol(Protocol::Grpc)
+                .with_timeout(Duration::from_secs(3))
+                .with_metadata(map)
+        )
+        // .with_trace_config(
+        //     trace::config()
+        //         .with_sampler(Sampler::AlwaysOn)
+        //         // .with_id_generator(RandomIdGenerator::default())
+        //         .with_max_events_per_span(64)
+        //         .with_max_attributes_per_span(16)
+        //         .with_max_events_per_span(16)
+        //         .with_resource(Resource::new(vec![KeyValue::new("service.name", "test")])),
+        // )
+        .install_simple().unwrap();
+// Create a tracing layer with the configured tracer
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+
     if cfg!(feature="tokio-debug") {
         println!("enabling tokio-console");
         let listen_address = env::var("TokioConsoleAddr").unwrap_or("127.0.0.1:5555".into());
@@ -30,13 +61,24 @@ pub fn init_logger(_application_name: &'static str, _rust_log_config: Option<&'s
             .server_addr(listen_address)
             // ... other configurations ...
             .spawn();
+        let filtered = fmt::layer()
+            .with_timer(time::LocalTime::rfc_3339())
+            .compact()
+            .with_thread_names(true)
+            .with_filter(filter);
         let subscriber = registry
             .with(console_layer)
-            .with(fmt::layer().with_filter(filter)); // log to stdout;
+            // .with(telemetry)
+            .with(filtered); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
     } else {
-        let filtered = fmt::layer().with_filter(filter);
+        let filtered = fmt::layer()
+            .with_timer(time::LocalTime::rfc_3339())
+            .compact()
+            .with_thread_names(true)
+            .with_filter(filter);
         let subscriber = registry
+            .with(telemetry)
             .with(filtered); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
     };
