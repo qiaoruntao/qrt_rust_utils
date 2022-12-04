@@ -11,10 +11,10 @@ use tracing::{info, instrument, warn};
 use tracing_subscriber::{EnvFilter, Layer, registry};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::time;
 use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(_application_name: &'static str, _rust_log_config: Option<&'static str>) {
-
     let filter = EnvFilter::from_default_env()
         .add_directive(LevelFilter::INFO.into());
     println!("filter={}", &filter);
@@ -30,13 +30,24 @@ pub fn init_logger(_application_name: &'static str, _rust_log_config: Option<&'s
             .server_addr(listen_address)
             // ... other configurations ...
             .spawn();
+        let filtered = fmt::layer()
+            .with_timer(time::LocalTime::rfc_3339())
+            .compact()
+            .with_thread_names(true)
+            .with_filter(filter);
         let subscriber = registry
             .with(console_layer)
-            .with(fmt::layer().with_filter(filter)); // log to stdout;
+            // .with(telemetry)
+            .with(filtered); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
     } else {
-        let filtered = fmt::layer().with_filter(filter);
+        let filtered = fmt::layer()
+            .with_timer(time::LocalTime::rfc_3339())
+            .compact()
+            .with_thread_names(true)
+            .with_filter(filter);
         let subscriber = registry
+            // .with(telemetry)
             .with(filtered); // log to stdout;
         tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
     };
