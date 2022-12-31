@@ -1,13 +1,14 @@
 use std::env;
 use std::net::SocketAddr;
 use std::time::Duration;
-use time::UtcTime;
 pub use console_subscriber;
 use opentelemetry::KeyValue;
 use opentelemetry::sdk::{Resource, trace};
 use opentelemetry::sdk::trace::Sampler;
 use opentelemetry_otlp::WithExportConfig;
 use tonic::metadata::*;
+use tracing_subscriber::fmt::{self, time::OffsetTime};
+
 // TODO
 // #[cfg(feature = "tokio-debug")]
 // use console_subscriber::spawn;
@@ -15,9 +16,6 @@ pub use tracing;
 use tracing::{info, instrument, Level, subscriber, warn};
 use tracing_subscriber::{EnvFilter, filter, Layer, registry};
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::fmt;
-use tracing_subscriber::fmt::time;
-use tracing_subscriber::fmt::time::OffsetTime;
 use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'static str>) {
@@ -63,9 +61,10 @@ pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'st
     let telemetry = tracing_opentelemetry::layer()
         .with_tracer(tracer)
         .with_filter(telemetry_filter);
-
+    let utc_offset = time::UtcOffset::from_hms(8, 0, 0).unwrap();
+    let timer = OffsetTime::new(utc_offset, time::format_description::well_known::Rfc3339);
     let filtered = fmt::layer()
-        // .with_timer(time::LocalTime::rfc_3339())
+        .with_timer(timer)
         .compact()
         .with_thread_names(true)
         .with_filter(filter);
