@@ -12,7 +12,7 @@ use tonic::metadata::*;
 // #[cfg(feature = "tokio-debug")]
 // use console_subscriber::spawn;
 pub use tracing;
-use tracing::{info, instrument, Level, warn};
+use tracing::{info, instrument, Level, subscriber, warn};
 use tracing_subscriber::{EnvFilter, filter, Layer, registry};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt;
@@ -64,7 +64,16 @@ pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'st
         .with_tracer(tracer)
         .with_filter(telemetry_filter);
 
-    if cfg!(feature="tokio-debug") {
+    let filtered = fmt::layer()
+        // .with_timer(time::LocalTime::rfc_3339())
+        .compact()
+        .with_thread_names(true)
+        .with_filter(filter);
+    let subscriber = registry
+        .with(telemetry)
+        .with(filtered); // log to stdout;
+    #[cfg(feature = "tokio-debug")]
+        let subscriber = {
         println!("enabling tokio-console");
         let listen_address = env::var("TokioConsoleAddr").unwrap_or("127.0.0.1:5555".into());
         let listen_address: SocketAddr = listen_address.parse().unwrap();
@@ -75,31 +84,9 @@ pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'st
             .server_addr(listen_address)
             // ... other configurations ...
             .spawn();
-        // let offset = time::UtcOffset::current_local_offset().expect("should get local offset!");
-        // let time_format = time::format_description::parse("[hour]:[minute]:[second]")
-        //     .expect("format string should be valid!");
-        // let timer = OffsetTime::new(offset, "ddddd");
-        let filtered = fmt::layer()
-            // .with_timer(timer)
-            .compact()
-            .with_thread_names(true)
-            .with_filter(filter);
-        let subscriber = registry
-            .with(console_layer)
-            // .with(telemetry)
-            .with(filtered); // log to stdout;
-        tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
-    } else {
-        let filtered = fmt::layer()
-            // .with_timer(time::LocalTime::rfc_3339())
-            .compact()
-            .with_thread_names(true)
-            .with_filter(filter);
-        let subscriber = registry
-            .with(telemetry)
-            .with(filtered); // log to stdout;
-        tracing::subscriber::set_global_default(subscriber).expect("setting global default failed");
+        subscriber.with(console_layer)
     };
+    subscriber::set_global_default(subscriber).expect("setting global default failed");
 }
 
 #[instrument]
