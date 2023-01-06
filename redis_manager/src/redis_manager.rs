@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use deadpool_redis::{Pool, PoolConfig, Runtime};
+use log_util::tracing::instrument;
 
 use crate::redis_handler::RedisHandler;
 
@@ -9,6 +10,7 @@ pub struct RedisManager {
 }
 
 impl RedisManager {
+    #[instrument]
     pub async fn new(connection_str: &str) -> RedisManager {
         let mut config = deadpool_redis::Config::from_url(connection_str);
         config.pool = Some(PoolConfig::new(2));
@@ -18,6 +20,7 @@ impl RedisManager {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn get_handler(&self) -> RedisHandler {
         RedisHandler {
             pool: self.pool.clone(),

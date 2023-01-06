@@ -2,11 +2,12 @@ use std::time::Duration;
 
 use reqwest::{Client, Proxy};
 use reqwest::header::HeaderMap;
-use tracing::info;
+use tracing::{info, instrument};
 
 pub struct RequestUtils {}
 
 impl RequestUtils {
+    #[instrument]
     pub fn build_client(timeout: Option<Duration>, proxy_address: Option<String>) -> Client {
         let mut header_map = HeaderMap::new();
         header_map.append("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36".parse().unwrap());

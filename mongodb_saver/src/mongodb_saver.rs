@@ -17,7 +17,7 @@ use mongodb::results::{InsertManyResult, InsertOneResult};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use log_util::tracing::{error, info};
+use log_util::tracing::{error, info, instrument};
 
 pub struct MongodbSaver {
     database: Database,
@@ -34,6 +34,7 @@ struct RowData {
 }
 
 impl MongodbSaver {
+    #[instrument]
     pub async fn init(connection_str: &str) -> Self {
         let client_options = if cfg!(windows) && connection_str.contains("+srv") {
             ClientOptions::parse_with_resolver_config(connection_str, ResolverConfig::quad9()).await.unwrap()
@@ -70,10 +71,12 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn get_collection<T: Serialize>(&self, collection_name: &str) -> Collection<T> {
         self.database.collection(collection_name)
     }
 
+    #[instrument(skip(self, obj))]
     pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<Option<InsertOneResult>> {
         let result = mongodb::bson::to_bson(obj)?;
         let now = Local::now();
@@ -91,12 +94,14 @@ impl MongodbSaver {
         result
     }
 
+    #[instrument(skip(self, obj))]
     pub async fn save_collection_with_time<T: Serialize>(&self, collection_name: &str, obj: &T, now: DateTime<Local>) -> anyhow::Result<Option<InsertOneResult>> {
         let result = mongodb::bson::to_bson(obj)?;
         let document = doc! {"time":now, "data":&result};
         MongodbSaver::save_collection_inner(self.get_collection(collection_name), &document).await
     }
 
+    #[instrument(skip(self, objs), fields(cnt = objs.len()))]
     pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<Option<InsertManyResult>> {
         let now = Local::now();
         let documents = objs.iter()
@@ -173,6 +178,7 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip(self, pipeline))]
     pub async fn aggregate_one<T: Serialize + DeserializeOwned>(&self, collection_name: &str, pipeline: impl IntoIterator<Item=Document>) -> anyhow::Result<T> {
         let collection = self.get_collection::<Document>(collection_name);
         let find_result = collection.aggregate(pipeline, None).await;
@@ -201,6 +207,7 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip(arc, document))]
     pub async fn write_local(arc: Pool, collection_name: &str, document: &Document) -> bool {
         let conn = arc.get().await.unwrap();
 
@@ -225,6 +232,7 @@ impl MongodbSaver {
         }).await.unwrap()
     }
 
+    #[instrument(skip(pool))]
     async fn get_sqlite_cnt(pool: Pool) -> Option<u64> {
         let conn = pool.get().await.unwrap();
         conn.interact(|conn| {
@@ -245,6 +253,7 @@ impl MongodbSaver {
     }
 
     // do some necessary clean up when mongodb connection is restored
+    #[instrument(skip(self))]
     pub fn clean_local(&self) {
         if !self.dirty.load(SeqCst) {
             // not dirty
@@ -276,6 +285,7 @@ impl MongodbSaver {
         });
     }
 
+    #[instrument(skip_all)]
     pub async fn pop_local(pool: Pool, database: Database) {
         // info!("start to pop local");
         let conn = pool.get().await.unwrap();

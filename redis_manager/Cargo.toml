@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tracing = "0"
 deadpool-redis = "0"
 redis = "0"
 log_util = { path = "../log_util" }

@@ -1,10 +1,12 @@
 use anyhow::anyhow;
 
 use ffmpeg_caller::ffmpeg_caller::FfmpegCaller;
+use log_util::tracing::instrument;
 
 pub struct VideoDownloader {}
 
 impl VideoDownloader {
+    #[instrument]
     pub async fn download(url: &str, path: &str) -> anyhow::Result<()> {
         let args = vec![
             // some site have strange protocol, like hist

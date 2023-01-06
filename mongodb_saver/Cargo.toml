@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tracing = "0"
 serde = "1"
 mongodb = { version = "2", features = ["bson-chrono-0_4"] }
 chrono = { version = "0", features = ["serde"] }

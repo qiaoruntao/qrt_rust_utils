@@ -9,6 +9,6 @@ edition = "2021"
 ffmpeg_caller = { path = "../ffmpeg_caller" }
 anyhow = "1"
 log_util = { path = "../log_util" }
-
+tracing = "0"
 [dev-dependencies]
 tokio = { version = "1", features = ["io-util", "process", "rt", "io-std", "macros", "fs"] }
