@@ -16,6 +16,7 @@ use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, Resol
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tracing::info_span;
 
 use log_util::tracing::{error, info, instrument};
 
@@ -78,9 +79,13 @@ impl MongodbSaver {
 
     #[instrument(skip(self, obj))]
     pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<Option<InsertOneResult>> {
-        let result = mongodb::bson::to_bson(obj)?;
-        let now = Local::now();
-        let document = doc! {"time":now, "data":&result};
+        let document = info_span!("serialize_part").in_scope(|| {
+            // TODO
+            let result = mongodb::bson::to_bson(obj).unwrap();
+            let now = Local::now();
+            doc! {"time":now, "data":&result}
+        });
+
         let result = MongodbSaver::save_collection_inner(self.get_collection(collection_name), &document).await;
         if result.is_ok() {
             // mongodb connection ok, check if we need to clean sqlite database
@@ -104,13 +109,17 @@ impl MongodbSaver {
     #[instrument(skip(self, objs), fields(cnt = objs.len()))]
     pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<Option<InsertManyResult>> {
         let now = Local::now();
-        let documents = objs.iter()
-            .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
-            .collect::<Vec<_>>();
+        let documents = info_span!("batch_serialize_part").in_scope(|| {
+            objs.iter()
+                // TODO
+                .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
+                .collect::<Vec<_>>()
+        });
 
         self.save_collection_inner_batch(collection_name, &documents, true).await
     }
 
+    #[instrument(skip_all)]
     async fn save_collection_inner_batch(&self, collection_name: &str, full_document: &[Document], can_write_local: bool) -> anyhow::Result<Option<InsertManyResult>> {
         let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_options = {
@@ -149,6 +158,7 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip_all)]
     async fn save_collection_inner(collection: Collection<Document>, full_document: &Document) -> anyhow::Result<Option<InsertOneResult>> {
         let insert_one_options = {
             let mut temp_write_concern = WriteConcern::default();
@@ -272,6 +282,9 @@ impl MongodbSaver {
 
         tokio::spawn(async move {
             let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await.unwrap_or(0);
+            if total_cnt == 0 {
+                return;
+            }
             for _ in 0..=(total_cnt / 100) {
                 MongodbSaver::pop_local(pool.clone(), database.clone()).await;
                 let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await;
