@@ -11,12 +11,13 @@ use deadpool_sqlite::{Config, Pool, Runtime};
 use futures::StreamExt;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
-use mongodb::error::{ErrorKind, WriteError, WriteFailure};
+use mongodb::error::{BulkWriteError, BulkWriteFailure, Error, ErrorKind, WriteError, WriteFailure};
+use mongodb::error::ErrorKind::BulkWrite;
 use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, ResolverConfig, WriteConcern};
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tracing::info_span;
+use tracing::{info_span, trace};
 
 use log_util::tracing::{error, info, instrument};
 
@@ -116,41 +117,57 @@ impl MongodbSaver {
                 .collect::<Vec<_>>()
         });
 
-        self.save_collection_inner_batch(collection_name, &documents, true).await
+        let result = self.save_collection_inner_batch(collection_name, &documents).await;
+        if result.is_err() {
+            for document in documents {
+                if MongodbSaver::write_local(self.sqlite_pool.clone(), collection_name, &document).await {
+                    self.dirty.store(true, SeqCst);
+                }
+            }
+        }
+        result
     }
 
     #[instrument(skip_all)]
-    async fn save_collection_inner_batch(&self, collection_name: &str, full_document: &[Document], can_write_local: bool) -> anyhow::Result<Option<InsertManyResult>> {
+    async fn save_collection_inner_batch(&self, collection_name: &str, all_documents: &[Document]) -> anyhow::Result<Option<InsertManyResult>> {
         let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_options = {
             let mut temp_write_concern = WriteConcern::default();
             temp_write_concern.w_timeout = Some(Duration::from_secs(3));
-
             let mut temp = InsertManyOptions::default();
             temp.write_concern = Option::from(temp_write_concern);
             temp.ordered = Some(false);
             temp
         };
-        match collection.insert_many(full_document, Some(insert_options)).await {
+        match collection.insert_many(all_documents, Some(insert_options)).await {
             Ok(val) => {
                 Ok(Some(val))
             }
             Err(e) => {
-                let x = e.kind.borrow();
-                match x {
-                    // E11000 duplicate key error collection, ignore it
-                    // TODO: report to the caller?
-                    ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
-                        Ok(None)
-                        // println!("not write local");
-                    }
-                    _ => {
-                        // println!("test");
-                        if can_write_local {
-                            for document in full_document {
-                                MongodbSaver::write_local(self.sqlite_pool.clone(), collection_name, document).await;
+                match &e {
+                    Error { kind, .. } => {
+                        match kind.as_ref() {
+                            BulkWrite(BulkWriteFailure { write_errors: Some(write_errors), .. }) => {
+                                // we are not sure which document cause the error(though message will contain the detail message ), so we need to retry every failed documents
+                                let first_non_duplicate_error = write_errors.iter().find(|write_error| {
+                                    write_error.code != 11000
+                                });
+
+                                if let Some(err) = first_non_duplicate_error {
+                                    // TODO: inserted_ids is private, cannot access it, we need to retry all documents
+                                    info!("contain_non_duplicate_error, first one is {:?}", err);
+                                    Err(e.into())
+                                } else {
+                                    // otherwise ignore error
+                                    Ok(None)
+                                }
+                            }
+                            _ => {
+                                Err(e.into())
                             }
                         }
+                    }
+                    _ => {
                         Err(e.into())
                     }
                 }
@@ -393,6 +410,23 @@ mod test {
         let result = mongodb_saver.save_collection("aaa", &document).await;
         dbg!(&result);
         tokio::time::sleep(Duration::from_secs(3600)).await;
+        // mongodb_saver.write_local("aaa", &document).await;
+        // mongodb_saver.pop_local().await;
+    }
+
+    #[tokio::test]
+    async fn test_bunk() {
+        let result = mongodb::bson::to_bson(&TestData { num: 2 }).unwrap();
+        let now = chrono::Local::now();
+        let document = doc! {"time":now, "data":&result};
+
+        let saver_db_str = env::var("MongoDbSaverStr").expect("need saver db str");
+        let mongodb_saver = MongodbSaver::init(saver_db_str.as_str()).await;
+        let result = mongodb_saver.save_collection_batch("aaa", &[document.clone()]).await;
+        dbg!(&result);
+        let result = mongodb_saver.save_collection_batch("aaa", &[document]).await;
+        dbg!(&result);
+        // tokio::time::sleep(Duration::from_secs(3600)).await;
         // mongodb_saver.write_local("aaa", &document).await;
         // mongodb_saver.pop_local().await;
     }
