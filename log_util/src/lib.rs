@@ -20,15 +20,15 @@ use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'static str>) {
     let filter = EnvFilter::from_default_env()
-        .add_directive(LevelFilter::INFO.into());
+        .add_directive(format!("{}=info", application_name).parse().unwrap());
     println!("filter={}", &filter);
     let registry = registry::Registry::default();
-    let mut map = MetadataMap::with_capacity(3);
     let api_key = match env::var("OTLP_KEY") {
         Ok(val) => val,
         Err(_) => panic!("api key not found"),
     };
     // map.insert("api-key", api_key.parse().unwrap());
+    let mut map = MetadataMap::with_capacity(8);
     map.insert("x-honeycomb-team", api_key.parse().unwrap());
     map.insert("x-honeycomb-dataset", "rust".parse().unwrap());
     let application_name = application_name;
