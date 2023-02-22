@@ -11,13 +11,15 @@ use deadpool_sqlite::{Config, Pool, Runtime};
 use futures::StreamExt;
 use mongodb::{Client, Collection, Database};
 use mongodb::bson::{doc, Document};
-use mongodb::error::{ErrorKind, WriteError, WriteFailure};
+use mongodb::error::{BulkWriteError, BulkWriteFailure, Error, ErrorKind, WriteError, WriteFailure};
+use mongodb::error::ErrorKind::BulkWrite;
 use mongodb::options::{ClientOptions, InsertManyOptions, InsertOneOptions, ResolverConfig, WriteConcern};
 use mongodb::results::{InsertManyResult, InsertOneResult};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tracing::{info_span, trace};
 
-use log_util::tracing::{error, info};
+use log_util::tracing::{error, info, instrument};
 
 pub struct MongodbSaver {
     database: Database,
@@ -34,6 +36,7 @@ struct RowData {
 }
 
 impl MongodbSaver {
+    #[instrument]
     pub async fn init(connection_str: &str) -> Self {
         let client_options = if cfg!(windows) && connection_str.contains("+srv") {
             ClientOptions::parse_with_resolver_config(connection_str, ResolverConfig::quad9()).await.unwrap()
@@ -70,14 +73,20 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip(self))]
     pub fn get_collection<T: Serialize>(&self, collection_name: &str) -> Collection<T> {
         self.database.collection(collection_name)
     }
 
+    #[instrument(skip(self, obj))]
     pub async fn save_collection<T: Serialize>(&self, collection_name: &str, obj: &T) -> anyhow::Result<Option<InsertOneResult>> {
-        let result = mongodb::bson::to_bson(obj)?;
-        let now = Local::now();
-        let document = doc! {"time":now, "data":&result};
+        let document = info_span!("serialize_part").in_scope(|| {
+            // TODO
+            let result = mongodb::bson::to_bson(obj).unwrap();
+            let now = Local::now();
+            doc! {"time":now, "data":&result}
+        });
+
         let result = MongodbSaver::save_collection_inner(self.get_collection(collection_name), &document).await;
         if result.is_ok() {
             // mongodb connection ok, check if we need to clean sqlite database
@@ -91,52 +100,74 @@ impl MongodbSaver {
         result
     }
 
+    #[instrument(skip(self, obj))]
     pub async fn save_collection_with_time<T: Serialize>(&self, collection_name: &str, obj: &T, now: DateTime<Local>) -> anyhow::Result<Option<InsertOneResult>> {
         let result = mongodb::bson::to_bson(obj)?;
         let document = doc! {"time":now, "data":&result};
         MongodbSaver::save_collection_inner(self.get_collection(collection_name), &document).await
     }
 
+    #[instrument(skip(self, objs), fields(cnt = objs.len()))]
     pub async fn save_collection_batch<T: Serialize>(&self, collection_name: &str, objs: &[T]) -> anyhow::Result<Option<InsertManyResult>> {
         let now = Local::now();
-        let documents = objs.iter()
-            .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
-            .collect::<Vec<_>>();
+        let documents = info_span!("batch_serialize_part").in_scope(|| {
+            objs.iter()
+                // TODO
+                .map(|obj| doc! {"time":now, "data":mongodb::bson::to_bson(obj).unwrap()})
+                .collect::<Vec<_>>()
+        });
 
-        self.save_collection_inner_batch(collection_name, &documents, true).await
+        let result = self.save_collection_inner_batch(collection_name, &documents).await;
+        if result.is_err() {
+            for document in documents {
+                if MongodbSaver::write_local(self.sqlite_pool.clone(), collection_name, &document).await {
+                    self.dirty.store(true, SeqCst);
+                }
+            }
+        }
+        result
     }
 
-    async fn save_collection_inner_batch(&self, collection_name: &str, full_document: &[Document], can_write_local: bool) -> anyhow::Result<Option<InsertManyResult>> {
+    #[instrument(skip_all)]
+    async fn save_collection_inner_batch(&self, collection_name: &str, all_documents: &[Document]) -> anyhow::Result<Option<InsertManyResult>> {
         let collection: Collection<Document> = self.get_collection(collection_name);
         let insert_options = {
             let mut temp_write_concern = WriteConcern::default();
             temp_write_concern.w_timeout = Some(Duration::from_secs(3));
-
             let mut temp = InsertManyOptions::default();
             temp.write_concern = Option::from(temp_write_concern);
             temp.ordered = Some(false);
             temp
         };
-        match collection.insert_many(full_document, Some(insert_options)).await {
+        match collection.insert_many(all_documents, Some(insert_options)).await {
             Ok(val) => {
                 Ok(Some(val))
             }
             Err(e) => {
-                let x = e.kind.borrow();
-                match x {
-                    // E11000 duplicate key error collection, ignore it
-                    // TODO: report to the caller?
-                    ErrorKind::Write(WriteFailure::WriteError(WriteError { code: 11000, .. })) => {
-                        Ok(None)
-                        // println!("not write local");
-                    }
-                    _ => {
-                        // println!("test");
-                        if can_write_local {
-                            for document in full_document {
-                                MongodbSaver::write_local(self.sqlite_pool.clone(), collection_name, document).await;
+                match &e {
+                    Error { kind, .. } => {
+                        match kind.as_ref() {
+                            BulkWrite(BulkWriteFailure { write_errors: Some(write_errors), .. }) => {
+                                // we are not sure which document cause the error(though message will contain the detail message ), so we need to retry every failed documents
+                                let first_non_duplicate_error = write_errors.iter().find(|write_error| {
+                                    write_error.code != 11000
+                                });
+
+                                if let Some(err) = first_non_duplicate_error {
+                                    // TODO: inserted_ids is private, cannot access it, we need to retry all documents
+                                    info!("contain_non_duplicate_error, first one is {:?}", err);
+                                    Err(e.into())
+                                } else {
+                                    // otherwise ignore error
+                                    Ok(None)
+                                }
+                            }
+                            _ => {
+                                Err(e.into())
                             }
                         }
+                    }
+                    _ => {
                         Err(e.into())
                     }
                 }
@@ -144,6 +175,7 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip_all)]
     async fn save_collection_inner(collection: Collection<Document>, full_document: &Document) -> anyhow::Result<Option<InsertOneResult>> {
         let insert_one_options = {
             let mut temp_write_concern = WriteConcern::default();
@@ -173,6 +205,7 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip(self, pipeline))]
     pub async fn aggregate_one<T: Serialize + DeserializeOwned>(&self, collection_name: &str, pipeline: impl IntoIterator<Item=Document>) -> anyhow::Result<T> {
         let collection = self.get_collection::<Document>(collection_name);
         let find_result = collection.aggregate(pipeline, None).await;
@@ -201,6 +234,7 @@ impl MongodbSaver {
         }
     }
 
+    #[instrument(skip(arc, document))]
     pub async fn write_local(arc: Pool, collection_name: &str, document: &Document) -> bool {
         let conn = arc.get().await.unwrap();
 
@@ -225,6 +259,7 @@ impl MongodbSaver {
         }).await.unwrap()
     }
 
+    #[instrument(skip(pool))]
     async fn get_sqlite_cnt(pool: Pool) -> Option<u64> {
         let conn = pool.get().await.unwrap();
         conn.interact(|conn| {
@@ -245,6 +280,7 @@ impl MongodbSaver {
     }
 
     // do some necessary clean up when mongodb connection is restored
+    #[instrument(skip(self))]
     pub fn clean_local(&self) {
         if !self.dirty.load(SeqCst) {
             // not dirty
@@ -263,6 +299,9 @@ impl MongodbSaver {
 
         tokio::spawn(async move {
             let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await.unwrap_or(0);
+            if total_cnt == 0 {
+                return;
+            }
             for _ in 0..=(total_cnt / 100) {
                 MongodbSaver::pop_local(pool.clone(), database.clone()).await;
                 let total_cnt = MongodbSaver::get_sqlite_cnt(pool.clone()).await;
@@ -276,6 +315,7 @@ impl MongodbSaver {
         });
     }
 
+    #[instrument(skip_all)]
     pub async fn pop_local(pool: Pool, database: Database) {
         // info!("start to pop local");
         let conn = pool.get().await.unwrap();
@@ -370,6 +410,23 @@ mod test {
         let result = mongodb_saver.save_collection("aaa", &document).await;
         dbg!(&result);
         tokio::time::sleep(Duration::from_secs(3600)).await;
+        // mongodb_saver.write_local("aaa", &document).await;
+        // mongodb_saver.pop_local().await;
+    }
+
+    #[tokio::test]
+    async fn test_bunk() {
+        let result = mongodb::bson::to_bson(&TestData { num: 2 }).unwrap();
+        let now = chrono::Local::now();
+        let document = doc! {"time":now, "data":&result};
+
+        let saver_db_str = env::var("MongoDbSaverStr").expect("need saver db str");
+        let mongodb_saver = MongodbSaver::init(saver_db_str.as_str()).await;
+        let result = mongodb_saver.save_collection_batch("aaa", &[document.clone()]).await;
+        dbg!(&result);
+        let result = mongodb_saver.save_collection_batch("aaa", &[document]).await;
+        dbg!(&result);
+        // tokio::time::sleep(Duration::from_secs(3600)).await;
         // mongodb_saver.write_local("aaa", &document).await;
         // mongodb_saver.pop_local().await;
     }

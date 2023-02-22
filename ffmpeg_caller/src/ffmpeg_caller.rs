@@ -8,7 +8,7 @@ use regex::Regex;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines};
 use tokio::io::AsyncRead;
 use tokio::process::Command;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 use crate::ffmpeg_progress::{Progress, Status};
 
@@ -85,6 +85,7 @@ fn parse_line(line: &str) -> Progress {
 }
 
 impl FfmpegCaller {
+    #[instrument(skip_all)]
     pub async fn run<I, S>(args: I, working_directory: &str) -> tokio::io::Result<ExitStatus>
         where
             I: IntoIterator<Item=S>,

@@ -5,7 +5,7 @@ use async_recursion::async_recursion;
 use tokio::io::{AsyncBufReadExt, BufReader, Lines};
 use tokio::io::AsyncRead;
 use tokio::process::Command;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, instrument};
 
 pub struct YoutubeDlManager {}
 
@@ -36,7 +36,7 @@ fn system_custom_modify(mut command: &mut Command) {
 fn system_custom_modify(_command: &mut Command) {}
 
 impl YoutubeDlManager {
-    // TODO: 返回值?
+    #[instrument]
     pub async fn download(url: &str, path: &str) -> anyhow::Result<()> {
         let mut command = Command::new("youtube-dl");
         let useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/77.0.3844.0 Safari/537.36";

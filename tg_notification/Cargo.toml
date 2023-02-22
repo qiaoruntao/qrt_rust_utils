@@ -9,4 +9,4 @@ edition = "2021"
 db_task = { git = "https://github.com/qiaoruntao/db_task.git" }
 #db_task = { path = "I:\\projects\\db_task" }
 serde = "1"
-serde-enum-str = "0.2"
+serde-enum-str = "0"

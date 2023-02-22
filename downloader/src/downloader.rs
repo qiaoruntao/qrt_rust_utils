@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::{error, instrument};
 use url::Url;
 
 use sanitizer::sanitize::sanitize;
@@ -22,6 +22,7 @@ pub struct SimpleDownloadTaskParam {
 
 // this module is under development
 impl Downloader {
+    #[instrument]
     pub async fn download_file(
         url: &str,
         filepath: &str,
@@ -33,6 +34,7 @@ impl Downloader {
         Ok(()) as Result<(), Box<dyn std::error::Error + Send + Sync>>
     }
 
+    #[instrument]
     pub async fn download(download_info: &SimpleDownloadTaskParam, download_config: &DownloadConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let url = download_info.download_url.clone();
         let download_directory = {

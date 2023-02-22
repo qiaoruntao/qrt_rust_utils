@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1", features = ["io-util", "process", "rt", "io-std", "macros", "fs"] }
 async-recursion = "1"
-tracing = "0.1"
+tracing = "0"
 log_util = { path = "../log_util" }
 anyhow = "1"
