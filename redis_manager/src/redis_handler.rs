@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use deadpool_redis::Pool;
 use deadpool_redis::redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use redis::aio::PubSub;
+use redis::{cmd, RedisResult};
 
 use log_util::tracing::{error, warn};
 
@@ -73,6 +74,7 @@ impl RedisHandler {
             }
         }
     }
+
     pub async fn del_hkey(&self, key: &str, field: &str) -> Option<i64> {
         let mut connection = self.pool.get().await.unwrap();
         match connection.hdel(key, field).await {
@@ -80,6 +82,23 @@ impl RedisHandler {
             Err(e) => {
                 error!("{}",&e);
                 None
+            }
+        }
+    }
+
+    pub async fn set_nx_expire(&self, key: &str, value: &str, expire_ms: i64) -> bool {
+        let mut connection = self.pool.get().await.unwrap();
+        let redis_result: RedisResult<Option<String>> = deadpool_redis::redis::cmd("SET")
+            .arg(key).arg(value).arg("NX").arg("PX").arg(expire_ms)
+            .query_async(&mut connection).await;
+        match redis_result {
+            Ok(Some(v)) => {
+                v == "OK"
+            }
+            Ok(None) => false,
+            Err(e) => {
+                error!("{}",&e);
+                false
             }
         }
     }
@@ -101,7 +120,7 @@ impl RedisHandler {
 }
 
 #[cfg(test)]
-mod test_redis_list {
+mod test_redis {
     use std::env;
     use std::time::Duration;
 
@@ -162,5 +181,13 @@ mod test_redis_list {
                 // println!("{}={}", channel, str);
             }
         }).await;
+    }
+
+    #[tokio::test]
+    async fn test_set_nx_ex() {
+        let str = env::var("redis_key").expect("redis_key not found");
+        let redis_manager = RedisManager::new(str.as_str()).await;
+        let redis_handler = redis_manager.get_handler();
+        redis_handler.set_nx_expire("a", "b", 99999).await;
     }
 }
