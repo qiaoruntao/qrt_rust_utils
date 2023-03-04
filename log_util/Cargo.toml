@@ -21,3 +21,4 @@ tokio = { version = "1", features = ["full"] }
 # disable other logging by default
 default = []
 tokio-debug = []
+honeycomb-log = []

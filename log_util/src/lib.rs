@@ -23,44 +23,9 @@ pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'st
         .add_directive(format!("{}=info", application_name).parse().unwrap());
     println!("filter={}", &filter);
     let registry = registry::Registry::default();
-    let api_key = match env::var("OTLP_KEY") {
-        Ok(val) => val,
-        Err(_) => panic!("api key not found"),
-    };
-    // map.insert("api-key", api_key.parse().unwrap());
-    let mut map = MetadataMap::with_capacity(8);
-    map.insert("x-honeycomb-team", api_key.parse().unwrap());
-    map.insert("x-honeycomb-dataset", "rust".parse().unwrap());
     let application_name = application_name;
     println!("application name={}", application_name);
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                // .with_endpoint("https://otlp.nr-data.net")
-                // .with_endpoint("http://localhost:4317")
-                .with_endpoint("https://api.honeycomb.io:443")
-                .with_metadata(map)
-                .with_timeout(Duration::from_secs(3))
-        )
-        .with_trace_config(
-            trace::config()
-                .with_sampler(Sampler::AlwaysOn)
-                // .with_id_generator(RandomIdGenerator::default())
-                // .with_max_events_per_span(64)
-                // .with_max_attributes_per_span(16)
-                // .with_max_events_per_span(16)
-                .with_resource(Resource::new(vec![KeyValue::new("service.name", application_name)])),
-        )
-        .install_batch(opentelemetry::runtime::Tokio).unwrap();
-    let telemetry_filter = filter::Targets::new()
-        .with_target("h2", Level::WARN)
-        .with_default(Level::INFO);
-// Create a tracing layer with the configured tracer
-    let telemetry = tracing_opentelemetry::layer()
-        .with_tracer(tracer)
-        .with_filter(telemetry_filter);
+
     let utc_offset = time::UtcOffset::from_hms(8, 0, 0).unwrap();
     let timer = OffsetTime::new(utc_offset, time::format_description::well_known::Rfc3339);
     let filtered = fmt::layer()
@@ -69,8 +34,48 @@ pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'st
         .with_thread_names(true)
         .with_filter(filter);
     let subscriber = registry
-        .with(telemetry)
         .with(filtered); // log to stdout;
+    #[cfg(feature = "honeycomb-log")]
+        let subscriber = {
+        let api_key = match env::var("OTLP_KEY") {
+            Ok(val) => val,
+            Err(_) => panic!("api key not found"),
+        };
+        // map.insert("api-key", api_key.parse().unwrap());
+        let mut map = MetadataMap::with_capacity(8);
+        map.insert("x-honeycomb-team", api_key.parse().unwrap());
+        map.insert("x-honeycomb-dataset", "rust".parse().unwrap());
+
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    // .with_endpoint("https://otlp.nr-data.net")
+                    // .with_endpoint("http://localhost:4317")
+                    .with_endpoint("https://api.honeycomb.io:443")
+                    .with_metadata(map)
+                    .with_timeout(Duration::from_secs(3))
+            )
+            .with_trace_config(
+                trace::config()
+                    .with_sampler(Sampler::AlwaysOn)
+                    // .with_id_generator(RandomIdGenerator::default())
+                    // .with_max_events_per_span(64)
+                    // .with_max_attributes_per_span(16)
+                    // .with_max_events_per_span(16)
+                    .with_resource(Resource::new(vec![KeyValue::new("service.name", application_name)])),
+            )
+            .install_batch(opentelemetry::runtime::Tokio).unwrap();
+        let telemetry_filter = filter::Targets::new()
+            .with_target("h2", Level::WARN)
+            .with_default(Level::INFO);
+// Create a tracing layer with the configured tracer
+        let telemetry = tracing_opentelemetry::layer()
+            .with_tracer(tracer)
+            .with_filter(telemetry_filter);
+        subscriber.with(telemetry)
+    };
     #[cfg(feature = "tokio-debug")]
         let subscriber = {
         println!("enabling tokio-console");
