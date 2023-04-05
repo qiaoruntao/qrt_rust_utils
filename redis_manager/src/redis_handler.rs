@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use deadpool_redis::Pool;
 use deadpool_redis::redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
-use redis::aio::PubSub;
-use redis::{cmd, RedisResult};
+use deadpool_redis::redis::aio::PubSub;
+use deadpool_redis::redis::{RedisResult, cmd};
 
 use log_util::tracing::{error, warn};
 
