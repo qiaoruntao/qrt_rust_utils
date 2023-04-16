@@ -1,6 +1,6 @@
 [package]
 name = "qrt_rust_utils"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2018"
 authors = ["qiaoruntao"]
 description = "qiaoruntao's rust utils"
@@ -9,5 +9,33 @@ license = "MIT OR Apache-2.0"
 
 [workspace]
 members = ["qrt_rust_macros", "tg_notification", "log_util"
-    , "downloader", "sanitizer", "ffmpeg_caller", "request_utils", "file_utils", "qrt_rust_macros", "mongodb_saver", "youtubedl-manager", "redis_manager", "video_downloader", "timed_counter", "chrome-manager"]
+    , "downloader", "sanitizer", "ffmpeg_caller", "request_utils", "file_utils", "qrt_rust_macros", "mongodb_saver", "youtubedl-manager", "redis_manager", "video_downloader", "timed_counter"]
 exclude = []
+[dependencies]
+qrt_rust_macros = { path = "qrt_rust_macros", optional = true , version="0"}
+tg_notification = { path = "tg_notification", optional = true , version="0"}
+log_util = { path = "log_util", optional = true , version="0"}
+downloader = { path = "downloader", optional = true , version="0"}
+sanitizer = { path = "sanitizer", optional = true , version="0"}
+ffmpeg_caller = { path = "ffmpeg_caller", optional = true , version="0"}
+request_utils = { path = "request_utils", optional = true , version="0"}
+file_utils = { path = "file_utils", optional = true , version="0"}
+mongodb_saver = { path = "mongodb_saver", optional = true , version="0"}
+youtubedl-manager = { path = "youtubedl-manager", optional = true , version="0"}
+redis_manager = { path = "redis_manager", optional = true , version="0"}
+video_downloader = { path = "video_downloader", optional = true , version="0"}
+timed_counter = { path = "timed_counter", optional = true , version="0"}
+[features]
+qrt_rust_macros = ["dep:qrt_rust_macros"]
+tg_notification = ["dep:tg_notification"]
+log_util = ["dep:log_util"]
+downloader = ["dep:downloader"]
+sanitizer = ["dep:sanitizer"]
+ffmpeg_caller = ["dep:ffmpeg_caller"]
+request_utils = ["dep:request_utils"]
+file_utils = ["dep:file_utils"]
+mongodb_saver = ["dep:mongodb_saver"]
+youtubedl-manager = ["dep:youtubedl-manager"]
+redis_manager = ["dep:redis_manager"]
+video_downloader = ["dep:video_downloader"]
+timed_counter = ["dep:timed_counter"]
