@@ -1,9 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use deadpool_redis::Pool;
+use deadpool_redis::{Connection, Pool};
 use deadpool_redis::redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use deadpool_redis::redis::aio::PubSub;
 use deadpool_redis::redis::{RedisResult, cmd};
+use futures::future::err;
+use redis::RedisError;
 
 use log_util::tracing::{error, warn};
 
@@ -13,26 +15,56 @@ pub struct RedisHandler {
 
 impl RedisHandler {
     pub async fn set_ex<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, value: T, seconds: usize) -> bool {
-        let mut connection = self.pool.get().await.unwrap();
-        connection.set_ex(key, value, seconds).await.unwrap()
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return false;
+            }
+        };
+        connection.set_ex(key, value, seconds).await.unwrap_or(false)
     }
     pub async fn set_value<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, value: T) -> bool {
-        let mut connection = self.pool.get().await.unwrap();
-        connection.set(key, value).await.unwrap()
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return false;
+            }
+        };
+        connection.set(key, value).await.unwrap_or(false)
     }
 
     pub async fn set_expire(&self, key: &str, seconds: usize) -> bool {
-        let mut connection = self.pool.get().await.unwrap();
-        connection.expire(key, seconds).await.unwrap()
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return false;
+            }
+        };
+        connection.expire(key, seconds).await.unwrap_or(false)
     }
 
     pub async fn push_value<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, value: T) -> bool {
-        let mut connection = self.pool.get().await.unwrap();
-        connection.rpush(key, value).await.unwrap()
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return false;
+            }
+        };
+        connection.rpush(key, value).await.unwrap_or(false)
     }
 
     pub async fn get_value<T: ToRedisArgs + Sync + Send + FromRedisValue, K: ToRedisArgs + Send + Sync>(&self, key: K) -> Option<T> {
-        let mut connection = self.pool.get().await.unwrap();
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return None;
+            }
+        };
         match connection.get(key).await {
             Ok(v) => v,
             Err(e) => {
@@ -43,7 +75,13 @@ impl RedisHandler {
     }
 
     pub async fn fetch_list<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str) -> Option<Vec<T>> {
-        let mut connection = self.pool.get().await.unwrap();
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return None;
+            }
+        };
         match connection.lrange(key, 0, isize::MAX).await {
             Ok(v) => v,
             Err(e) => {
@@ -54,7 +92,13 @@ impl RedisHandler {
     }
 
     pub async fn fetch_map<T: ToRedisArgs + Sync + Send + FromRedisValue, K: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str) -> Option<Vec<(T, K)>> {
-        let mut connection = self.pool.get().await.unwrap();
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return None;
+            }
+        };
         match connection.hgetall(key).await {
             Ok(v) => v,
             Err(e) => {
@@ -65,7 +109,13 @@ impl RedisHandler {
     }
 
     pub async fn fetch_hkey<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, field: &str) -> Option<T> {
-        let mut connection = self.pool.get().await.unwrap();
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return None;
+            }
+        };
         match connection.hget(key, field).await {
             Ok(v) => v,
             Err(e) => {
@@ -76,7 +126,13 @@ impl RedisHandler {
     }
 
     pub async fn del_hkey(&self, key: &str, field: &str) -> Option<i64> {
-        let mut connection = self.pool.get().await.unwrap();
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return None;
+            }
+        };
         match connection.hdel(key, field).await {
             Ok(v) => v,
             Err(e) => {
@@ -87,7 +143,13 @@ impl RedisHandler {
     }
 
     pub async fn set_nx_expire(&self, key: &str, value: &str, expire_ms: i64) -> bool {
-        let mut connection = self.pool.get().await.unwrap();
+        let mut connection = match self.pool.get().await {
+            Ok(v) => { v }
+            Err(e) => {
+                error!("failed to get redis connection {}",e);
+                return false;
+            }
+        };
         let redis_result: RedisResult<Option<String>> = deadpool_redis::redis::cmd("SET")
             .arg(key).arg(value).arg("NX").arg("PX").arg(expire_ms)
             .query_async(&mut connection).await;
@@ -108,7 +170,7 @@ impl RedisHandler {
         // self.pool.resize(self.pool.status().max_size + 1);
         match self.pool.get().await {
             Ok(connection) => {
-                let deadpool_connection = deadpool_redis::Connection::take(connection);
+                let deadpool_connection = Connection::take(connection);
                 Some(deadpool_connection.into_pubsub())
             }
             Err(e) => {
