@@ -104,7 +104,7 @@ impl YoutubeDlManager {
 
 #[cfg(test)]
 mod test {
-    use log_util::init_logger;
+    use qrt_log_utils::init_logger;
 
     use crate::youtubedl_manager::YoutubeDlManager;
 

@@ -19,7 +19,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tracing::{info_span, trace};
 
-use log_util::tracing::{error, info, instrument};
+use qrt_log_utils::tracing::{error, info, instrument};
 
 pub struct MongodbSaver {
     database: Database,

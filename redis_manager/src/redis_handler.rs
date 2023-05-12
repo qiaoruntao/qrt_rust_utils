@@ -1,13 +1,10 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use deadpool_redis::{Connection, Pool};
 use deadpool_redis::redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use deadpool_redis::redis::aio::PubSub;
-use deadpool_redis::redis::{RedisResult, cmd};
-use futures::future::err;
-use redis::RedisError;
-
-use log_util::tracing::{error, warn};
+use deadpool_redis::redis::RedisResult;
+use qrt_log_utils::tracing::error;
 
 pub struct RedisHandler {
     pub pool: Arc<Pool>,

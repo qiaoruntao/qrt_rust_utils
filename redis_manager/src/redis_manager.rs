@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use deadpool_redis::{Pool, PoolConfig, Runtime};
-use log_util::tracing::instrument;
+use qrt_log_utils::tracing::instrument;
 
 use crate::redis_handler::RedisHandler;
 
@@ -32,7 +32,7 @@ impl RedisManager {
 mod test {
     use std::env;
 
-    use log_util::init_logger;
+    use qrt_log_utils::init_logger;
 
     use crate::redis_manager::RedisManager;
 

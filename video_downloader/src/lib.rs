@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 
 use ffmpeg_caller::ffmpeg_caller::FfmpegCaller;
-use log_util::tracing::instrument;
+use qrt_log_utils::tracing::instrument;
 
 pub struct VideoDownloader {}
 
