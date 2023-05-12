@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-db_task = { git = "https://github.com/qiaoruntao/db_task.git" }
-#db_task = { path = "I:\\projects\\db_task" }
+db_task = "0"
 serde = "1"
 serde-enum-str = "0"

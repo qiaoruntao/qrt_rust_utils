@@ -15,7 +15,6 @@ use tracing_subscriber::fmt::{self, time::OffsetTime};
 pub use tracing;
 use tracing::{info, instrument, Level, subscriber, warn};
 use tracing_subscriber::{EnvFilter, filter, Layer, registry};
-use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 
 pub fn init_logger(application_name: &'static str, _rust_log_config: Option<&'static str>) {
