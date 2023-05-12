@@ -9,7 +9,7 @@ edition = "2021"
 tracing = "0"
 deadpool-redis = "0"
 redis = "0"
-log_util = { path = "../log_util" }
+qrt-log-utils = "0"
 futures = "0"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }

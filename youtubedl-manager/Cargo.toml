@@ -9,5 +9,5 @@ edition = "2021"
 tokio = { version = "1", features = ["io-util", "process", "rt", "io-std", "macros", "fs"] }
 async-recursion = "1"
 tracing = "0"
-log_util = { path = "../log_util" }
+qrt-log-utils = "0"
 anyhow = "1"

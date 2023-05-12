@@ -14,7 +14,7 @@ anyhow = "1"
 futures = "0"
 rusqlite = { version = "0", features = ["bundled"] }
 serde_json = "1"
-log_util = { path = "../log_util" }
+qrt-log-utils = "0"
 tokio = { version = "1" }
 deadpool-sqlite = "0"
 [dev-dependencies]
