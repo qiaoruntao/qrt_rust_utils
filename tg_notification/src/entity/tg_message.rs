@@ -1,6 +1,3 @@
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
 use serde::Deserialize;
 use serde::Serialize;
 use serde_enum_str::{Deserialize_enum_str, Serialize_enum_str};
@@ -22,12 +19,6 @@ pub struct TgMessage {
 }
 
 impl TgMessage {
-    pub fn gen_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.text.hash(&mut hasher);
-        hasher.finish()
-    }
-
     pub fn build_text(text: String) -> Self {
         TgMessage {
             text,

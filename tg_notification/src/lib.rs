@@ -1,32 +1,29 @@
-use db_task::app::common::TaskAppBasicOperations;
-use db_task::task::TaskInfo;
-use db_task::tasker::single_tasker_producer::SingleTaskerProducer;
+use std::time::{SystemTime, UNIX_EPOCH};
+use mscheduler::tasker::error::MResult;
+use mscheduler::tasker::producer::{SendTaskResult, TaskProducer};
+use mscheduler::util::get_collection;
 
 use crate::entity::tg_message::TgMessage;
 
 pub mod entity;
 
-#[derive(Debug)]
-pub struct TgNotificationTaskInfo {}
-
-impl TaskInfo for TgNotificationTaskInfo {
-    type Params = TgMessage;
-    type Returns = ();
-}
-
 pub struct NotificationManager {
-    manager: SingleTaskerProducer<TgNotificationTaskInfo>,
+    manager: TaskProducer<TgMessage, ()>,
 }
 
 impl NotificationManager {
-    pub async fn send_text_message(&self, text: String) -> db_task::anyhow::Result<bool> {
+    pub async fn send_text_message(&self, text: String) -> MResult<SendTaskResult> {
+        let current_time = SystemTime::now().duration_since(UNIX_EPOCH).expect("Time went backwards");
+        let timestamp = current_time.as_secs();
+        let key = timestamp.to_string();
         let tg_message = TgMessage::build_text(text);
-        self.manager.send_new_task(tg_message).await
+        self.manager.send_task(key, tg_message, None).await
     }
-    pub async fn init(connection_str: &str, collection_name: &str) -> NotificationManager {
-        let notification_collection = SingleTaskerProducer::init(connection_str, collection_name).await;
+    pub async fn init(connection_str: impl AsRef<str>, collection_name: impl AsRef<str>) -> NotificationManager {
+        let collection = get_collection(connection_str, collection_name).await;
+        let manager = TaskProducer::create(collection).expect("failed to init NotificationManager");
         NotificationManager {
-            manager: notification_collection
+            manager
         }
     }
 }
