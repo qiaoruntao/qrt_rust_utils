@@ -19,7 +19,7 @@ impl RedisHandler {
                 return false;
             }
         };
-        connection.set_ex(key, value, seconds).await.unwrap_or(false)
+        connection.set_ex(key, value, seconds.try_into().expect("cannot convert seconds")).await.unwrap_or(false)
     }
     pub async fn set_value<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, value: T) -> bool {
         let mut connection = match self.pool.get().await {
@@ -40,7 +40,7 @@ impl RedisHandler {
                 return false;
             }
         };
-        connection.expire(key, seconds).await.unwrap_or(false)
+        connection.expire(key, seconds.try_into().expect("cannot convert seconds")).await.unwrap_or(false)
     }
 
     pub async fn push_value<T: ToRedisArgs + Sync + Send + FromRedisValue>(&self, key: &str, value: T) -> bool {
